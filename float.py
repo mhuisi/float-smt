@@ -12,7 +12,7 @@ RoundingMode, (NearestTieToEven, NearestTieAwayFromZero, Up, Down, Truncate) = E
 def FloatSort(mantissa_size : int, exponent_size : int) -> DatatypeSortRef: 
     # we're using Datatypes instead of tuples because Datatypes encapsulate constructors and accessors nicely
     Float = Datatype("Float(%d, %d)" % (mantissa_size, exponent_size))
-    Float.declare("mk", ("sign", BoolSort()), 
+    Float.declare("mk", ("sign", BitVecSort(1)), 
                  ("mantissa", BitVecSort(mantissa_size)), 
                  ("exponent", BitVecSort(exponent_size)))
     return Float.create()
@@ -24,8 +24,8 @@ def sizes(sort : DatatypeSortRef):
 def Float(name : str, mantissa_size : int, exponent_size : int):
     return Const(name, FloatSort(mantissa_size, exponent_size))
 
-def FloatVal(sign : bool, mantissa : int, exponent : int, sort : DatatypeSortRef):
-    return sort.mk(BoolVal(sign), BitVecVal(mantissa), BitVecVal(exponent))
+def FloatVal(sign : int, mantissa : int, exponent : int, sort : DatatypeSortRef):
+    return sort.mk(BitVecVal(sign), BitVecVal(mantissa), BitVecVal(exponent))
 
 def FloatValDec(dec_val : str, rounding_mode : converter.RoundingMode, sort : DatatypeSortRef):
     mantissa_size, exponent_size = sizes(sort)
@@ -36,15 +36,15 @@ def FloatValDec(dec_val : str, rounding_mode : converter.RoundingMode, sort : Da
     # this is a suboptimal conversion 
     # (converter converts ints to binary strings, here we convert strings back to int)
     # but we can get around to fixing this at some later point in the decoder
-    return FloatVal(f.s == "1", int(f.m, 2), int(f.e, 2), sort)
+    return FloatVal(int(f.s), int(f.m, 2), int(f.e, 2), sort)
 
-def FloatValBV(bv : BitVecRef, sort : DatatypeSortRef):
+def FloatValBV(bv : BitVecNumRef, sort : DatatypeSortRef):
     mantissa_size, exponent_size = sizes(sort)
-    val = BV2Int(bv)
+    val = bv.as_long()
     mantissa = val & (2**mantissa_size - 1)
     exponent = val & ((2**exponent_size - 1) << mantissa_size)
     sign = val & (1 << (mantissa_size + exponent_size))
-    return FloatVal(sign == 1, mantissa, exponent, sort)
+    return FloatVal(sign, mantissa, exponent, sort)
 
 def FloatValPosInf(sort : DatatypeSortRef):
     mantissa_size, exponent_size = sizes(sort)
@@ -57,6 +57,10 @@ def FloatValNegInf(sort : DatatypeSortRef):
 def FloatValNaN(sort : DatatypeSortRef, value=1):
     if value == 0:
         raise ValueError("NaN value cannot be zero")
-    sign = value >= 0
+    sign = int(value >= 0)
     mantissa_size, exponent_size = sizes(sort)
     return FloatVal(sign, value, 2**exponent_size - 1)
+
+def to_ieee_bv(val : DatatypeRef):
+    s = val.sort()
+    return Concat(s.sign(val), s.exponent(val), s.mantissa(val))
