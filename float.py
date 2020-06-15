@@ -37,3 +37,26 @@ def FloatValDec(dec_val : str, rounding_mode : converter.RoundingMode, sort : Da
     # (converter converts ints to binary strings, here we convert strings back to int)
     # but we can get around to fixing this at some later point in the decoder
     return FloatVal(f.s == "1", int(f.m, 2), int(f.e, 2), sort)
+
+def FloatValBV(bv : BitVecRef, sort : DatatypeSortRef):
+    mantissa_size, exponent_size = sizes(sort)
+    val = BV2Int(bv)
+    mantissa = val & (2**mantissa_size - 1)
+    exponent = val & ((2**exponent_size - 1) << mantissa_size)
+    sign = val & (1 << (mantissa_size + exponent_size))
+    return FloatVal(sign == 1, mantissa, exponent, sort)
+
+def FloatValPosInf(sort : DatatypeSortRef):
+    mantissa_size, exponent_size = sizes(sort)
+    return FloatVal(0, 0, 2**exponent_size - 1)
+
+def FloatValNegInf(sort : DatatypeSortRef):
+    mantissa_size, exponent_size = sizes(sort)
+    return FloatVal(1, 0, 2**exponent_size - 1)
+
+def FloatValNaN(sort : DatatypeSortRef, value=1):
+    if value == 0:
+        raise ValueError("NaN value cannot be zero")
+    sign = value >= 0
+    mantissa_size, exponent_size = sizes(sort)
+    return FloatVal(sign, value, 2**exponent_size - 1)
