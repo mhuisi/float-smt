@@ -52,7 +52,7 @@ def FloatValNegInf(sort : DatatypeSortRef) -> DatatypeRef:
     m, e = sizes(sort)
     return FloatVal(1, 0, 2**e - 1)
 
-def FloatValNaN(sort : DatatypeSortRef, value=1) -> DatatypeRef:
+def FloatValNaN(sort : DatatypeSortRef, value = 1) -> DatatypeRef:
     if value == 0:
         raise ValueError("NaN value cannot be zero")
     m, e = sizes(sort)
@@ -67,7 +67,14 @@ def to_ieee_bv(a : DatatypeRef) -> BitVecNumRef:
     s = get_sort(a)
     return Concat(s.sign(a), s.exponent(a), s.mantissa(a))
 
-def eq_bitwise(a: DatatypeRef, b: DatatypeRef) -> BoolRef:
+def ensure_eq_sort(a : DatatypeRef, b : DatatypeRef):
+    a_m, a_e = sizes(get_sort(a))
+    b_m, b_e = sizes(get_sort(b))
+    if a_m != b_m or a_e != b_e:
+        raise ValueError("cannot compute operation on two floats with different sorts")
+
+def eq_bitwise(a : DatatypeRef, b : DatatypeRef) -> BoolRef:
+    ensure_eq_sort(a, b)
     return to_ieee_bv(a) == to_ieee_bv(b)
 
 # Checks whether a is +0
@@ -86,9 +93,7 @@ def is_zero(val : DatatypeRef) -> BoolRef:
 def is_inf(a : DatatypeRef) -> BoolRef:
     s = get_sort(a)
     m, e = sizes(s)
-    mantissa = s.mantissa(a)
-    exponent = s.exponent(a)
-    return And(mantissa == BitVecVal(0, m), exponent == BitVecVal(2**e - 1, e))
+    return And(s.mantissa(a) == BitVecVal(0, m), s.exponent(a) == BitVecVal(2**e - 1, e))
 
 # Checks whether a is +inf
 def is_pos_inf(a : DatatypeRef) -> BoolRef:
@@ -117,9 +122,7 @@ def is_nan(a : DatatypeRef, nan_value : int = 0) -> BoolRef:
 def is_subnormal(a : DatatypeRef) -> BoolRef:
     s = get_sort(a)
     m, e = sizes(s)
-    mantissa = s.mantissa(a)
-    exponent = s.exponent(a)
-    return And(Not(mantissa == BitVecVal(0, m)), exponent == BitVecVal(0, e))
+    return And(Not(s.mantissa(a) == BitVecVal(0, m)), s.exponent(a) == BitVecVal(0, e))
 
 # Checks whether a is a normal float
 def is_normal(a : DatatypeRef) -> BoolRef:
@@ -127,3 +130,41 @@ def is_normal(a : DatatypeRef) -> BoolRef:
                Not(is_zero(a)), 
                Not(is_subnormal(a)), 
                Not(is_nan(a)))
+
+# Checks whether a is equal to b:
+# If either is NaN, the two are unequal.
+# If both are zero (either pos. or neg. zero), they are equal.
+# Otherwise, they are equal iff their bitvector representations are equal.
+def eq(a : DatatypeRef, b : DatatypeRef) -> BoolRef:
+    ensure_eq_sort(a, b)
+    return And(Not(Or(is_nan(a), is_nan(b))), 
+               Or(And(is_zero(a), is_zero(a)), 
+                  eq_bitwise(a, b)))
+
+# Checks whether a is greater than b.
+# If either is NaN or both are zero, a is not greater than b.
+def gt(a : DatatypeRef, b : DatatypeRef) -> BoolRef:
+    ensure_eq_sort(a, b)
+    s = get_sort(a)
+    abs_gt = UGT(Concat(s.exponent(a), s.mantissa(a)), Concat(s.exponent(b), s.mantissa(b)))
+    abs_lt = ULT(Concat(s.exponent(a), s.mantissa(a)), Concat(s.exponent(b), s.mantissa(b)))
+    return And(Not(Or(is_nan(a), is_nan(b))),
+               Not(And(is_zero(a), is_zero(b))),
+               Or(And(s.sign(a) == 0, s.sign(b) == 1), 
+                  And(s.sign(a) == 0, s.sign(b) == 0, abs_gt),
+                  And(s.sign(a) == 1, s.sign(b) == 1, abs_lt)))
+
+# Checks whether a is less than b.
+# If either is NaN or both are zero, a is not less than b.
+def lt(a : DatatypeRef, b : DatatypeRef) -> BoolRef:
+    return gt(b, a)
+
+# Checks whether a is greater than or equal to b.
+# If either is NaN, a is not greater than or equal to b.
+def gte(a : DatatypeRef, b : DatatypeRef) -> BoolRef:
+    return Or(gt(a, b), eq(a, b))
+
+# Checks whether a is less than or equal to b.
+# If either is NaN, a is not less than or equal to b.
+def lte(a : DatatypeRef, b : DatatypeRef) -> BoolRef:
+    return gte(b, a)
