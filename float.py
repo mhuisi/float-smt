@@ -24,6 +24,10 @@ def sizes(sort : DatatypeSortRef) -> (int, int):
 def Float(name : str, mantissa_size : int, exponent_size : int) -> DatatypeRef:
     return Const(name, FloatSort(mantissa_size, exponent_size))
 
+def FloatVar(sign : BitVecRef, mantissa : BitVecRef, exponent : BitVecRef, sort : DatatypeSortRef) -> DatatypeRef:
+    #f = Const("test", sort)
+    return sort.mk(sign, mantissa, exponent)
+
 def FloatVal(sign : int, mantissa : int, exponent : int, sort : DatatypeSortRef) -> DatatypeRef:
     m, e = sizes(sort)
     return sort.mk(BitVecVal(sign, 1), BitVecVal(mantissa, m), BitVecVal(exponent, e))
@@ -135,7 +139,7 @@ def is_normal(a : DatatypeRef) -> BoolRef:
 # If either is NaN, the two are unequal.
 # If both are zero (either pos. or neg. zero), they are equal.
 # Otherwise, they are equal iff their bitvector representations are equal.
-def eq(a : DatatypeRef, b : DatatypeRef) -> BoolRef:
+def eq_float(a : DatatypeRef, b : DatatypeRef) -> BoolRef:
     ensure_eq_sort(a, b)
     return And(Not(Or(is_nan(a), is_nan(b))), 
                Or(And(is_zero(a), is_zero(a)), 
@@ -162,9 +166,51 @@ def lt(a : DatatypeRef, b : DatatypeRef) -> BoolRef:
 # Checks whether a is greater than or equal to b.
 # If either is NaN, a is not greater than or equal to b.
 def gte(a : DatatypeRef, b : DatatypeRef) -> BoolRef:
-    return Or(gt(a, b), eq(a, b))
+    return Or(gt(a, b), eq_float(a, b))
 
 # Checks whether a is less than or equal to b.
 # If either is NaN, a is not less than or equal to b.
 def lte(a : DatatypeRef, b : DatatypeRef) -> BoolRef:
     return gte(b, a)
+
+# Sets the sign bit to 0
+def abs(a : DatatypeRef) -> DatatypeRef:
+    s = get_sort(a)
+    sign = BitVecVal(0, 1)
+    return FloatVar(sign, s.mantissa(a), s.exponent(a), s)
+
+# Inverts the sign bit
+def neg(a : DatatypeRef) -> DatatypeRef:
+    s = get_sort(a)
+    sign = If(s.sign(a) == 1, BitVecVal(0, 1), BitVecVal(1, 1))
+    return FloatVar(sign, s.mantissa(a), s.exponent(a), s)
+
+# Adds the floating point values a & b
+def add(a : DatatypeRef, b : DatatypeRef) -> DatatypeRef: pass
+
+# Subtracts b from a
+def sub(a : DatatypeRef, b : DatatypeRef) -> DatatypeRef: pass
+
+# Multiplies a with b
+def mul(a : DatatypeRef, b : DatatypeRef) -> DatatypeRef: pass
+
+# Divides a by b
+def div(a : DatatypeRef, b : DatatypeRef) -> DatatypeRef: pass
+
+# Performs the operation a modulo b
+def rem(a : DatatypeRef, b : DatatypeRef) -> DatatypeRef: pass
+
+# Performs the square-root operation on a node a
+def sqrt(a : DatatypeRef) -> DatatypeRef: pass
+
+# Performs the operation a + (b * c)
+def fma(a : DatatypeRef, b : DatatypeRef, c : DatatypeRef) -> DatatypeRef:
+    return add(a, mul(b,c))
+
+# Returns a node containing a if a <= b and b else
+def min(a : DatatypeRef, b : DatatypeRef) -> DatatypeRef:
+    return If(gte(a, b), b, a)
+
+# Returns a node containing a if a >= b and b else
+def max(a : DatatypeRef, b : DatatypeRef) -> DatatypeRef:
+    return neg(min(neg(a), neg(b)))
