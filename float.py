@@ -185,14 +185,77 @@ def neg(a : DatatypeRef) -> DatatypeRef:
     sign = If(s.sign(a) == 1, BitVecVal(0, 1), BitVecVal(1, 1))
     return FloatVar(sign, s.mantissa(a), s.exponent(a), s)
 
+# should be cheaper to keep track of the unpacked state with this flag
+FloatCase, (unpacked_normal_case, zero_case, inf_case, nan_case) = EnumSort('FloatCase', ['unpacked_normal', 'zero', 'inf', 'nan'])
+
+# Unpacks a float, identifying the specific case of float (as above),
+# prepending the implicit leading 1 to the mantissa and turning the exponent into
+# an unbiased signed representation.
+# The float returned by this function is not a real float, in the sense
+# that if case != unpacked_normal_case, is_* predicates do not work as expected
+# anymore, there's no implicit leading 1 for normal floats and the real exponent
+# is one larger than the one yielded by the float of this function.
+def unpack(f : DatatypeRef) -> (DatatypeRef, DatatypeRef):
+    s = get_sort(f)
+    m, e = sizes(s)
+    new_sort = FloatSort(m+1, e)
+    sign = s.sign(f)
+    mantissa = s.mantissa(f)
+    exponent = s.exponent(f) - BitVecVal(2**(e-1) - 1, e)
+    case = If(is_nan(f), nan_case, 
+           If(is_inf(f), inf_case, 
+           If(is_zero(f), zero_case,
+              unpacked_normal_case)))
+    extended_subnormal = FloatVar(sign, ZeroExt(1, mantissa), exponent, new_sort)
+    extended_normal = FloatVar(sign, Concat(BitVecVal(1, 1), mantissa), exponent, new_sort)
+    return case, If(is_subnormal(f), extended_subnormal, extended_normal)
+
+def pack(f : DatatypeRef, case : DatatypeRef, sort : DatatypeSortRef) -> DatatypeRef:
+    # TODO: turn f into a proper float again, normalize number and round with remainder of mantissa in f.
+    # the mantissa of f is of the form 0...01x...xy...y, where 1x...x are the first m bits of the mantissa (m is the mantissa size in sort),
+    # and y...y is the remainder.
+    # the sign in f should be correct independent of the case.
+    # should also take care of edge cases like inf/nan/etc after the operation.
+    pass
+
 # Adds the floating point values a & b
 def add(a : DatatypeRef, b : DatatypeRef) -> DatatypeRef: pass
 
 # Subtracts b from a
-def sub(a : DatatypeRef, b : DatatypeRef) -> DatatypeRef: pass
+def sub(a : DatatypeRef, b : DatatypeRef) -> DatatypeRef:
+    return add(a, neg(b))
 
 # Multiplies a with b
-def mul(a : DatatypeRef, b : DatatypeRef) -> DatatypeRef: pass
+def mul(a : DatatypeRef, b : DatatypeRef) -> DatatypeRef:
+    ensure_eq_sort(a, b)
+    case_a, a = unpack(a)
+    case_b, b = unpack(b)
+    # handle some special cases preemptively so we don't
+    # accidentally lose that information during the operation
+    result_case = If(Or(case_a == nan_case, 
+                        case_b == nan_case, 
+                        And(case_a == inf_case, case_b == zero_case), 
+                        And(case_a == zero_case, case_b == inf_case)),
+                     nan_case,
+                  If(Or(case_a == inf_case, case_b == inf_case), 
+                     inf_case,
+                  If(Or(case_a == zero_case, case_b == zero_case),
+                     zero_case,
+                     unpacked_normal_case))) # could still be zero or inf instead after the operation (underflow or overflow)
+    s = get_sort(a)
+    m, e = sizes(s)
+    a_mantissa = ZeroExt(m, s.mantissa(a))
+    b_mantissa = ZeroExt(m, s.mantissa(b))
+    mantissa_result = a_mantissa * b_mantissa
+    underflow = Not(BVAddNoUnderflow(s.exponent(a), s.exponent(b), True))
+    overflow = Not(BVAddNoOverflow(s.exponent(a), s.exponent(b), True))
+    exponent_result = s.exponent(a) + s.exponent(b)
+    result_case = If(result_case != unpacked_normal_case, result_case, 
+                  If(underflow, zero_case, 
+                  If(overflow, inf_case, unpacked_normal_case)))
+    result_sign = If(s.sign(a) == s.sign(b), BitVecVal(0, 1), BitVecVal(1, 1))
+    result = pack(FloatVar(result_sign, mantissa_result, exponent_result, s))
+    return result
 
 # Divides a by b
 def div(a : DatatypeRef, b : DatatypeRef) -> DatatypeRef: pass
@@ -205,7 +268,7 @@ def sqrt(a : DatatypeRef) -> DatatypeRef: pass
 
 # Performs the operation a + (b * c)
 def fma(a : DatatypeRef, b : DatatypeRef, c : DatatypeRef) -> DatatypeRef:
-    return add(a, mul(b,c))
+    return add(a, mul(b,c)) # TODO: Fix incorrect impl (fma is add & multiply, but only rounds after both)
 
 # Returns a node containing a if a <= b and b else
 def min(a : DatatypeRef, b : DatatypeRef) -> DatatypeRef:
