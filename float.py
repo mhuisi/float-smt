@@ -211,7 +211,7 @@ def unpack(f : DatatypeRef) -> (DatatypeRef, DatatypeRef):
     extended_normal = FloatVar(sign, Concat(BitVecVal(1, 1), mantissa), exponent, new_sort)
     return case, If(is_subnormal(f), extended_subnormal, extended_normal)
 
-def pack(f : DatatypeRef, sort : DatatypeSortRef, rounding_mode : DatatypeRef) -> DatatypeRef:
+def pack(f : DatatypeRef, sort : DatatypeSortRef, rounding_mode : DatatypeRef = Truncate) -> DatatypeRef:
     # TODO: turn f into a proper float again, normalize number and round with remainder of mantissa in f.
     # the mantissa of f is of the form 0...01x...xy...y, where 1x...x are the first m bits of the mantissa (m is the mantissa size in sort),
     # and y...y is the remainder.
@@ -227,39 +227,37 @@ def pack(f : DatatypeRef, sort : DatatypeSortRef, rounding_mode : DatatypeRef) -
 
     exponent = s.exponent(f) + BitVecVal(2**(e-1) - 1, e)
     exponent_padded_m = ZeroExt(mantissa.size()-exponent.size(), exponent)
-
-
     normal = BVSubNoUnderflow(exponent, leading_zeros_padded_e, False)
-
     exponent = If(normal, exponent - leading_zeros_padded_e, BitVecVal(0, e))
-
-
     remainder = LShR(mantissa, -(mantissa.size()-m)) #due to extract not working on symbolic expressions, also no need to shift back again
-    
 
     mantissa = If(normal,
         Extract(mantissa.size()-2, (mantissa.size()-1-m), LShR(mantissa, -(leading_zeros_padded_m))),
         Extract(mantissa.size()-2, (mantissa.size()-1-m), LShR(mantissa, exponent_padded_m))
         )
 
-
     # Following, you'll see the biggest If-condition mess known to mankind
     half_of_max_remainder = 2**remainder.size()-1
-
     round_nearest_tie_even = If(remainder == half_of_max_remainder,
                                     If(URem(mantissa, 2) == 1, BitVecVal(1, m), BitVecVal(0, m)),
-                                    If(remainder > half_of_max_remainder,
+                                    If(UGT(remainder, half_of_max_remainder),
                                         BitVecVal(1, m),
                                         BitVecVal(0, m)
                                     ))
     round_nearest_tie_zero = If(remainder == half_of_max_remainder,
                                     BitVecVal(0, m),
-                                    If(remainder > half_of_max_remainder,
+                                    If(UGT(remainder, half_of_max_remainder),
                                         BitVecVal(1, m),
                                         BitVecVal(0, m)
                                     ))
-    round_up = If(sign == 1, BitVecVal(0, m), BitVecVal(1, m))
-    round_down = If(sign == 1, BitVecVal(1, m), BitVecVal(0, m))
+    round_up = If(UGT(remainder, 0),
+                        If(sign == 1, BitVecVal(0, m), BitVecVal(1, m)),
+                        BitVecVal(0, m)
+                    )
+    round_down = If(UGT(remainder, 0),
+                        If(sign == 1, BitVecVal(1, m), BitVecVal(0, m)),
+                        BitVecVal(0, m)
+                    )
     round_truncate = BitVecVal(0, m)
 
     round_addition = If(rounding_mode == NearestTieToEven, round_nearest_tie_even,
@@ -268,20 +266,63 @@ def pack(f : DatatypeRef, sort : DatatypeSortRef, rounding_mode : DatatypeRef) -
                      If(rounding_mode == Down, round_down,
                      If(rounding_mode == Truncate, round_truncate, 0 #The second case should not be possible
                      )))))
-
     mantissa = mantissa + round_addition
     
     return FloatVar(sign, mantissa, exponent, sort)
 
 # Adds the floating point values a & b
-def add(a : DatatypeRef, b : DatatypeRef) -> DatatypeRef: pass
+def add(a : DatatypeRef, b : DatatypeRef, rounding_mode : DatatypeRef = Truncate) -> DatatypeRef:
+    ensure_eq_sort(a, b)
+    
+    #Unpack the floats and put the (absolute) bigger one into x:
+    
+    x = If(gt(abs(a), abs(b)), a, b)
+    y = If(gt(abs(a), abs(b)), b, a)
+    case_x, x = unpack(x)
+    case_y, y = unpack(y)
+
+    sort = get_sort(x)
+    m,e = sizes(sort)
+
+    exponent_diff = sort.exponent(x) - sort.exponent(y)
+
+    #Adding 3 additional bits at the end of the mantissas for rounding:
+    mantissa_x, mantissa_y = sort.mantissa(x), sort.mantissa(y)
+    mantissa_x, mantissa_y = ZeroExt(3, mantissa_x), ZeroExt(3, mantissa_y)
+    mantissa_x, mantissa_y = LShR(mantissa_x, -3), LShR(mantissa_y, -3)
+
+    #Shifting the y mantissa to match the exponent of x:
+    exponent_diff = ZeroExt(mantissa_y.size() - exponent_diff.size(), exponent_diff)
+    mantissa_y_shifted = LShR(mantissa_y, exponent_diff)
+
+
+    #Overflow stuff:
+    overflow = Not(BVAddNoOverflow(mantissa_x, mantissa_y_shifted, False))
+    exponent_result = If(overflow, sort.exponent(x) + 1, sort.exponent(x))
+
+    mantissa_y_shifted = If(overflow, LShR(mantissa_y_shifted, 1), mantissa_y_shifted)
+    mantissa_x = If(overflow, LShR(mantissa_x, 1), mantissa_x)
+
+    #Sticky Bit:
+    amount_of_kept_bits = If(UGT(mantissa_y.size() - exponent_diff, 0) , mantissa_y.size() - exponent_diff - If(overflow, 1, 0), 0)
+    infinite_rem = LShR(LShR(mantissa_y, -amount_of_kept_bits), amount_of_kept_bits) #Get the bits that were shiftet away
+    sticky_bit = If(UGT(infinite_rem, 0), BitVecVal(1,mantissa_y.size()), BitVecVal(0,mantissa_y.size()))
+    
+    mantissa_result = If(sort.sign(x) + sort.sign(y) == 1, mantissa_x - mantissa_y_shifted, mantissa_x + mantissa_y_shifted)
+    mantissa_result = mantissa_result + sticky_bit
+    
+    #should work due to x having the bigger value:
+    sign_result = sort.sign(x)
+
+    new_sort = FloatSort(mantissa_result.size(), e)
+    return pack(FloatVar(sign_result, mantissa_result, exponent_result, new_sort), sort, rounding_mode)
 
 # Subtracts b from a
-def sub(a : DatatypeRef, b : DatatypeRef) -> DatatypeRef:
+def sub(a : DatatypeRef, b : DatatypeRef, rounding_mode : DatatypeRef = Truncate) -> DatatypeRef:
     return add(a, neg(b))
 
 # Multiplies a with b
-def mul(a : DatatypeRef, b : DatatypeRef) -> DatatypeRef:
+def mul(a : DatatypeRef, b : DatatypeRef, rounding_mode : DatatypeRef = Truncate) -> DatatypeRef:
     ensure_eq_sort(a, b)
     case_a, a = unpack(a)
     case_b, b = unpack(b)
@@ -309,26 +350,29 @@ def mul(a : DatatypeRef, b : DatatypeRef) -> DatatypeRef:
                   If(underflow, zero_case, 
                   If(overflow, inf_case, unpacked_normal_case)))
     result_sign = If(s.sign(a) == s.sign(b), BitVecVal(0, 1), BitVecVal(1, 1))
-    result = pack(FloatVar(result_sign, mantissa_result, exponent_result, s))
+
+    new_sort = FloatSort(mantissa_result.size(), exponent_result.size())
+
+    result = pack(FloatVar(result_sign, mantissa_result, exponent_result, new_sort), s, rounding_mode)
     return result
 
 # Divides a by b
-def div(a : DatatypeRef, b : DatatypeRef) -> DatatypeRef: pass
+def div(a : DatatypeRef, b : DatatypeRef, rounding_mode : DatatypeRef = Truncate) -> DatatypeRef: pass
 
 # Performs the operation a modulo b
-def rem(a : DatatypeRef, b : DatatypeRef) -> DatatypeRef: pass
+def rem(a : DatatypeRef, b : DatatypeRef, rounding_mode : DatatypeRef = Truncate) -> DatatypeRef: pass
 
 # Performs the square-root operation on a node a
-def sqrt(a : DatatypeRef) -> DatatypeRef: pass
+def sqrt(a : DatatypeRef, rounding_mode : DatatypeRef = Truncate) -> DatatypeRef: pass
 
 # Performs the operation a + (b * c)
-def fma(a : DatatypeRef, b : DatatypeRef, c : DatatypeRef) -> DatatypeRef:
-    return add(a, mul(b,c)) # TODO: Fix incorrect impl (fma is add & multiply, but only rounds after both)
+def fma(a : DatatypeRef, b : DatatypeRef, c : DatatypeRef, rounding_mode : DatatypeRef = Truncate) -> DatatypeRef:
+    return add(a, mul(b,c,rounding_mode), rounding_mode) # TODO: Fix incorrect impl (fma is add & multiply, but only rounds after both)
 
 # Returns a node containing a if a <= b and b else
-def min(a : DatatypeRef, b : DatatypeRef) -> DatatypeRef:
+def min(a : DatatypeRef, b : DatatypeRef, rounding_mode : DatatypeRef = Truncate) -> DatatypeRef:
     return If(gte(a, b), b, a)
 
 # Returns a node containing a if a >= b and b else
-def max(a : DatatypeRef, b : DatatypeRef) -> DatatypeRef:
+def max(a : DatatypeRef, b : DatatypeRef, rounding_mode : DatatypeRef = Truncate) -> DatatypeRef:
     return neg(min(neg(a), neg(b)))
