@@ -1,5 +1,6 @@
 from z3 import *
 import converter
+import utils.utils as utils
 
 RoundingMode, (NearestTieToEven, NearestTieAwayFromZero, Up, Down, Truncate) = EnumSort("RoundingMode", [
     "NearestTieToEven", 
@@ -21,7 +22,7 @@ def sizes(sort : DatatypeSortRef) -> (int, int):
     c = sort.constructor(0)
     return (c.domain(1).size(), c.domain(2).size())
 
-def Float(name : str, mantissa_size : int, exponent_size : int) -> DatatypeRef:
+def FloatConst(name : str, mantissa_size : int, exponent_size : int) -> DatatypeRef:
     return Const(name, FloatSort(mantissa_size, exponent_size))
 
 def FloatVar(sign : BitVecRef, mantissa : BitVecRef, exponent : BitVecRef, sort : DatatypeSortRef) -> DatatypeRef:
@@ -63,7 +64,7 @@ def FloatValNaN(sort : DatatypeSortRef, value = 1) -> DatatypeRef:
     sign = int(value >= 0)
     return FloatVal(sign, value, 2**e - 1)
 
-def get_sort(a : Float) -> DatatypeSortRef:
+def get_sort(a : DatatypeRef) -> DatatypeSortRef:
     m, e = sizes(a.sort())
     return FloatSort(m, e)
 
@@ -210,13 +211,67 @@ def unpack(f : DatatypeRef) -> (DatatypeRef, DatatypeRef):
     extended_normal = FloatVar(sign, Concat(BitVecVal(1, 1), mantissa), exponent, new_sort)
     return case, If(is_subnormal(f), extended_subnormal, extended_normal)
 
-def pack(f : DatatypeRef, case : DatatypeRef, sort : DatatypeSortRef) -> DatatypeRef:
+def pack(f : DatatypeRef, sort : DatatypeSortRef, rounding_mode : DatatypeRef) -> DatatypeRef:
     # TODO: turn f into a proper float again, normalize number and round with remainder of mantissa in f.
     # the mantissa of f is of the form 0...01x...xy...y, where 1x...x are the first m bits of the mantissa (m is the mantissa size in sort),
     # and y...y is the remainder.
     # the sign in f should be correct independent of the case.
     # should also take care of edge cases like inf/nan/etc after the operation.
-    pass
+    s = get_sort(f)
+    m, e = sizes(sort)
+    sign = s.sign(f)
+    mantissa = s.mantissa(f)
+    leading_zeros = utils.clz(mantissa)
+    leading_zeros_padded_e = ZeroExt(e-leading_zeros.size(), leading_zeros)
+    leading_zeros_padded_m = ZeroExt(mantissa.size()-leading_zeros.size(), leading_zeros)
+
+    exponent = s.exponent(f) + BitVecVal(2**(e-1) - 1, e)
+    exponent_padded_m = ZeroExt(mantissa.size()-exponent.size(), exponent)
+
+
+    normal = BVSubNoUnderflow(exponent, leading_zeros_padded_e, False)
+
+    exponent = If(normal, exponent - leading_zeros_padded_e, BitVecVal(0, e))
+
+
+    remainder = LShR(mantissa, -(mantissa.size()-m)) #due to extract not working on symbolic expressions, also no need to shift back again
+    
+
+    mantissa = If(normal,
+        Extract(mantissa.size()-2, (mantissa.size()-1-m), LShR(mantissa, -(leading_zeros_padded_m))),
+        Extract(mantissa.size()-2, (mantissa.size()-1-m), LShR(mantissa, exponent_padded_m))
+        )
+
+
+    # Following, you'll see the biggest If-condition mess known to mankind
+    half_of_max_remainder = 2**remainder.size()-1
+
+    round_nearest_tie_even = If(remainder == half_of_max_remainder,
+                                    If(URem(mantissa, 2) == 1, BitVecVal(1, m), BitVecVal(0, m)),
+                                    If(remainder > half_of_max_remainder,
+                                        BitVecVal(1, m),
+                                        BitVecVal(0, m)
+                                    ))
+    round_nearest_tie_zero = If(remainder == half_of_max_remainder,
+                                    BitVecVal(0, m),
+                                    If(remainder > half_of_max_remainder,
+                                        BitVecVal(1, m),
+                                        BitVecVal(0, m)
+                                    ))
+    round_up = If(sign == 1, BitVecVal(0, m), BitVecVal(1, m))
+    round_down = If(sign == 1, BitVecVal(1, m), BitVecVal(0, m))
+    round_truncate = BitVecVal(0, m)
+
+    round_addition = If(rounding_mode == NearestTieToEven, round_nearest_tie_even,
+                     If(rounding_mode == NearestTieAwayFromZero, round_nearest_tie_zero,
+                     If(rounding_mode == Up, round_up,
+                     If(rounding_mode == Down, round_down,
+                     If(rounding_mode == Truncate, round_truncate, 0 #The second case should not be possible
+                     )))))
+
+    mantissa = mantissa + round_addition
+    
+    return FloatVar(sign, mantissa, exponent, sort)
 
 # Adds the floating point values a & b
 def add(a : DatatypeRef, b : DatatypeRef) -> DatatypeRef: pass

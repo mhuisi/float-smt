@@ -269,11 +269,60 @@ class Operations(unittest.TestCase):
     def test_max(self):
         pass
 
+    def test_pack(self):
+
+        case, unpacked = unpack(self.__pos_zero)
+        self.true(eq_bitwise(pack(unpacked, self.__sort, Truncate), self.__pos_zero))
+
+        case, unpacked = unpack(self.__neg_zero)
+        self.true(eq_bitwise(pack(unpacked, self.__sort,Truncate), self.__neg_zero))
+
+        case, unpacked = unpack(self.__pos_inf)
+        self.true(eq_bitwise(pack(unpacked, self.__sort, Truncate), self.__pos_inf))
+
+        case, unpacked = unpack(self.__neg_inf)
+        self.true(eq_bitwise(pack(unpacked, self.__sort, Truncate), self.__neg_inf))
+
+        case, unpacked = unpack(self.__normal5)
+        self.true(eq_bitwise(pack(unpacked, self.__sort, Truncate), self.__normal5))
+
+        case, unpacked = unpack(self.__normal6)
+        self.true(eq_bitwise(pack(unpacked, self.__sort, Truncate), self.__normal6))
+
+        case, unpacked = unpack(self.__nan1)
+        self.true(eq_bitwise(pack(unpacked, self.__sort, Truncate), self.__nan1))
+
+        case, unpacked = unpack(self.__normal1)
+        self.true(eq_bitwise(pack(unpacked, self.__sort, Truncate), self.__normal1))
+
+        case, unpacked = unpack(self.__neg_normal1)
+        self.true(eq_bitwise(pack(unpacked, self.__sort, Truncate), self.__neg_normal1))
+
+        case, unpacked = unpack(self.__normal2)
+        self.true(eq_bitwise(pack(unpacked, self.__sort, Truncate), self.__normal2))
+
+        case, unpacked = unpack(self.__normal3)
+        self.true(eq_bitwise(pack(unpacked, self.__sort, Truncate), self.__normal3))
+
+        case, unpacked = unpack(self.__normal4)
+        self.true(eq_bitwise(pack(unpacked, self.__sort, Truncate), self.__normal4))
+
+        case, unpacked = unpack(self.__subnormal1)
+        self.true(eq_bitwise(pack(unpacked, self.__sort, Truncate), self.__subnormal1))
+
+        case, unpacked = unpack(self.__subnormal2)
+        self.true(eq_bitwise(pack(unpacked, self.__sort, Truncate), self.__subnormal2))
+
+        x = FloatConst("x", 5, 5)
+        case, unpacked = unpack(x)
+        result = validate(eq_bitwise(pack(unpacked, FloatSort(5, 5), Truncate), x))
+        self.assertTrue(result) #This already includes all the above checks
 
 
-
-
-
+def validate(statement):
+    solver = Solver()
+    solver.add(Not(statement))
+    return solver.check() == unsat
 
 
 if __name__ == '__main__':
