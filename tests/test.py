@@ -318,6 +318,21 @@ class Operations(unittest.TestCase):
         result = validate(eq_bitwise(pack(unpacked, FloatSort(5, 5), Truncate), x))
         self.assertTrue(result) #This already includes all the above checks
 
+        #now do that for the other rounding modes:
+        
+
+        result = validate(eq_bitwise(pack(unpacked, FloatSort(5, 5), NearestTieAwayFromZero), x))
+        self.assertTrue(result)
+
+        result = validate(eq_bitwise(pack(unpacked, FloatSort(5, 5), Up), x))
+        self.assertTrue(result)
+
+        result = validate(eq_bitwise(pack(unpacked, FloatSort(5, 5), Down), x))
+        self.assertTrue(result)
+
+        result = validate(eq_bitwise(pack(unpacked, FloatSort(5, 5), NearestTieToEven), x))
+        self.assertTrue(result)
+
 
 def validate(statement):
     solver = Solver()
