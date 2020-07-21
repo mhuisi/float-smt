@@ -320,7 +320,6 @@ class Operations(unittest.TestCase):
 
         #now do that for the other rounding modes:
         
-
         result = validate(eq_bitwise(pack(unpacked, FloatSort(5, 5), NearestTieAwayFromZero), x))
         self.assertTrue(result)
 
@@ -337,7 +336,10 @@ class Operations(unittest.TestCase):
 def validate(statement):
     solver = Solver()
     solver.add(Not(statement))
-    return solver.check() == unsat
+    result = solver.check()
+    if(result == sat):
+        print(solver.model())
+    return result == unsat
 
 
 if __name__ == '__main__':
