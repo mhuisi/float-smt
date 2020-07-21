@@ -212,12 +212,12 @@ def unpack(f : DatatypeRef) -> (DatatypeRef, DatatypeRef):
     return case, If(is_subnormal(f), extended_subnormal, extended_normal)
 
 def pack(f : DatatypeRef, sort : DatatypeSortRef, rounding_mode : DatatypeRef = Truncate) -> DatatypeRef:
-    # TODO: turn f into a proper float again, normalize number and round with remainder of mantissa in f.
     # the mantissa of f is of the form 0...01x...xy...y, where 1x...x are the first m bits of the mantissa (m is the mantissa size in sort),
     # and y...y is the remainder.
     # the sign in f should be correct independent of the case.
     # should also take care of edge cases like inf/nan/etc after the operation.
     s = get_sort(f)
+    m_old, e_old = sizes(s)
     m, e = sizes(sort)
     sign = s.sign(f)
     mantissa = s.mantissa(f)
@@ -229,10 +229,14 @@ def pack(f : DatatypeRef, sort : DatatypeSortRef, rounding_mode : DatatypeRef = 
     exponent_padded_m = ZeroExt(mantissa.size()-exponent.size(), exponent)
     normal = BVSubNoUnderflow(exponent, leading_zeros_padded_e, False)
     exponent = If(normal, exponent - leading_zeros_padded_e, BitVecVal(0, e))
-    remainder = LShR(mantissa, -(mantissa.size()-m)) #due to extract not working on symbolic expressions, also no need to shift back again
+
+    amount_of_lost_bits = If(normal, m_old - m - leading_zeros_padded_m - 1 , m_old - m - exponent_padded_m - 1) #minus one due to the implicit bit
+    #remainder to be interpeted as bv not a numerical representation: so if the cut off bits were 101, the remainder would be 101000...
+    
+    remainder = mantissa << (mantissa.size() - amount_of_lost_bits + 1) #due to extract not working on symbolic expressions, also no need to shift back again
 
     mantissa = If(normal,
-        Extract(mantissa.size()-2, (mantissa.size()-1-m), LShR(mantissa, -(leading_zeros_padded_m))),
+        Extract(mantissa.size()-2, (mantissa.size()-1-m), mantissa << leading_zeros_padded_m),
         Extract(mantissa.size()-2, (mantissa.size()-1-m), LShR(mantissa, exponent_padded_m))
         )
 
@@ -289,7 +293,7 @@ def add(a : DatatypeRef, b : DatatypeRef, rounding_mode : DatatypeRef = Truncate
     #Adding 3 additional bits at the end of the mantissas for rounding:
     mantissa_x, mantissa_y = sort.mantissa(x), sort.mantissa(y)
     mantissa_x, mantissa_y = ZeroExt(3, mantissa_x), ZeroExt(3, mantissa_y)
-    mantissa_x, mantissa_y = LShR(mantissa_x, -3), LShR(mantissa_y, -3)
+    mantissa_x, mantissa_y = mantissa_x << 3, mantissa_y << -3
 
     #Shifting the y mantissa to match the exponent of x:
     exponent_diff = ZeroExt(mantissa_y.size() - exponent_diff.size(), exponent_diff)
@@ -305,7 +309,7 @@ def add(a : DatatypeRef, b : DatatypeRef, rounding_mode : DatatypeRef = Truncate
 
     #Sticky Bit:
     amount_of_kept_bits = If(UGT(mantissa_y.size() - exponent_diff, 0) , mantissa_y.size() - exponent_diff - If(overflow, 1, 0), 0)
-    infinite_rem = LShR(LShR(mantissa_y, -amount_of_kept_bits), amount_of_kept_bits) #Get the bits that were shiftet away
+    infinite_rem = LShR(mantissa_y << amount_of_kept_bits, amount_of_kept_bits) #Get the bits that were shiftet away
     sticky_bit = If(UGT(infinite_rem, 0), BitVecVal(1,mantissa_y.size()), BitVecVal(0,mantissa_y.size()))
     
     mantissa_result = If(sort.sign(x) + sort.sign(y) == 1, mantissa_x - mantissa_y_shifted, mantissa_x + mantissa_y_shifted)
