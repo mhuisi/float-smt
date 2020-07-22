@@ -174,6 +174,16 @@ class ComparisonOps(unittest.TestCase):
         self.false(gt(self.__pos_inf, self.__nan1))
         self.false(gt(self.__nan1, self.__neg_inf))
         self.false(gt(self.__normal1, self.__normal2))
+        
+        x,y = FloatConst("x", 23, 8), FloatConst("y", 23, 8)
+        x_z3, y_z3 = Float_to_z3FP(x), Float_to_z3FP(y)
+
+        result = validate(Or(
+                                (gt(x, y) == fpGT(x_z3, y_z3)), 
+                                Or(is_nan(x), is_nan(y))
+                            )
+                        )
+        self.assertTrue(result)
 
 class Operations(unittest.TestCase):
     __mantissa_size, __exponent_size = 2, 3
