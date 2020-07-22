@@ -271,7 +271,17 @@ class Operations(unittest.TestCase):
         pass
 
     def test_mul(self):
-        pass
+        x, y = FloatConst("x", 23, 8), FloatConst("y", 23, 8)
+        x_z3, y_z3 = Float_to_z3FP(x), Float_to_z3FP(y)
+
+        for rm in (NearestTieToEven, NearestTieAwayFromZero, Up, Down, Truncate):
+            result = validate( 
+                Or(
+                    ( Float_to_z3FP(mul(x, y, rm)) == fpMul(rm_to_z3rm(rm), x_z3, y_z3) ),
+                    Or(is_nan(x), is_nan(y))
+                )
+            )
+            self.assertTrue(result)
 
     def test_div(self):
         pass
