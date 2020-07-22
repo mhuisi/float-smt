@@ -332,6 +332,8 @@ def sub(a : DatatypeRef, b : DatatypeRef, rounding_mode : DatatypeRef = Truncate
 # Multiplies a with b
 def mul(a : DatatypeRef, b : DatatypeRef, rounding_mode : DatatypeRef = Truncate) -> DatatypeRef:
     ensure_eq_sort(a, b)
+    result_sort = get_sort(a)
+
     case_a, a = unpack(a)
     case_b, b = unpack(b)
     # handle some special cases preemptively so we don't
@@ -361,7 +363,7 @@ def mul(a : DatatypeRef, b : DatatypeRef, rounding_mode : DatatypeRef = Truncate
 
     new_sort = FloatSort(mantissa_result.size(), exponent_result.size())
 
-    result = pack(FloatVar(result_sign, mantissa_result, exponent_result, new_sort), s, rounding_mode)
+    result = pack(FloatVar(result_sign, mantissa_result, exponent_result, new_sort), result_sort, rounding_mode)
     return result
 
 # Divides a by b
