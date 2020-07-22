@@ -41,13 +41,12 @@ def FloatValDec(dec_val : str, rounding_mode : converter.RoundingMode, sort : Da
     # but we can get around to fixing this at some later point in the decoder
     return FloatVal(int(f.s), int(f.m, 2), int(f.e, 2), sort)
 
-def FloatValBV(bv : BitVecNumRef, sort : DatatypeSortRef) -> DatatypeRef:
+def FloatValBV(bv : BitVecRef, sort : DatatypeSortRef) -> DatatypeRef:
     m, e = sizes(sort)
-    val = bv.as_long()
-    mantissa = val & (2**m - 1)
-    exponent = val & ((2**e - 1) << m)
-    sign = val & (1 << (m + e))
-    return FloatVal(sign, mantissa, exponent, sort)
+    mantissa = Extract(m-1, 0, bv)
+    exponent = Extract(m+e-1, m, bv)
+    sign = Extract(m+e, m+e, bv)
+    return FloatVar(sign, mantissa, exponent, sort)
 
 def FloatValPosInf(sort : DatatypeSortRef) -> DatatypeRef:
     m, e = sizes(sort)
