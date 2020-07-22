@@ -280,7 +280,12 @@ class Operations(unittest.TestCase):
         pass
 
     def test_squrt(self):
-        pass
+        x = FloatConst("x", 23, 8)
+        x_z3 = Float_to_z3FP(x)
+
+        for rm in (NearestTieToEven, NearestTieAwayFromZero, Up, Down, Truncate):
+            result = validate((Float_to_z3FP(sqrt(x, rm)) == fpSqrt(rm_to_z3rm(rm), x_z3)))
+            self.assertTrue(result)
 
     def test_fma(self):
         pass
