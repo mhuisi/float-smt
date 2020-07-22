@@ -241,7 +241,7 @@ def pack(f : DatatypeRef, sort : DatatypeSortRef, rounding_mode : DatatypeRef = 
         )
 
     # Following, you'll see the biggest If-condition mess known to mankind
-    half_of_max_remainder = 2**remainder.size()-1
+    half_of_max_remainder = 2**(remainder.size()-1)
     round_nearest_tie_even = If(remainder == half_of_max_remainder,
                                     If(URem(mantissa, 2) == 1, BitVecVal(1, m), BitVecVal(0, m)),
                                     If(UGT(remainder, half_of_max_remainder),
@@ -293,7 +293,7 @@ def add(a : DatatypeRef, b : DatatypeRef, rounding_mode : DatatypeRef = Truncate
     #Adding 3 additional bits at the end of the mantissas for rounding:
     mantissa_x, mantissa_y = sort.mantissa(x), sort.mantissa(y)
     mantissa_x, mantissa_y = ZeroExt(3, mantissa_x), ZeroExt(3, mantissa_y)
-    mantissa_x, mantissa_y = mantissa_x << 3, mantissa_y << -3
+    mantissa_x, mantissa_y = mantissa_x << 3, mantissa_y << 3
 
     #Shifting the y mantissa to match the exponent of x:
     exponent_diff = ZeroExt(mantissa_y.size() - exponent_diff.size(), exponent_diff)
@@ -312,8 +312,9 @@ def add(a : DatatypeRef, b : DatatypeRef, rounding_mode : DatatypeRef = Truncate
     infinite_rem = LShR(mantissa_y << amount_of_kept_bits, amount_of_kept_bits) #Get the bits that were shiftet away
     sticky_bit = If(UGT(infinite_rem, 0), BitVecVal(1,mantissa_y.size()), BitVecVal(0,mantissa_y.size()))
     
+    #Compute mantissa
     mantissa_result = If(sort.sign(x) + sort.sign(y) == 1, mantissa_x - mantissa_y_shifted, mantissa_x + mantissa_y_shifted)
-    mantissa_result = mantissa_result + sticky_bit
+    mantissa_result = mantissa_result + sticky_bit #TODO: problem
     
     #should work due to x having the bigger value:
     sign_result = sort.sign(x)
