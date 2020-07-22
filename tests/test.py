@@ -8,6 +8,18 @@ class Float(unittest.TestCase):
         self.assertEqual(mantissa_size, sizes(sort)[0])
         self.assertEqual(exponent_size, sizes(sort)[1])
 
+    def test_converions_to_Z3(self):
+        x,y = FloatConst("x", 23, 8), FloatConst("y", 23, 8)
+        result = validate(
+            Or(
+                eq_bitwise(
+                    z3FP_to_Float(Float_to_z3FP(x)),
+                    x),
+                is_nan(x)
+            )
+        )
+        self.assertTrue(result)
+
 class is_functions(unittest.TestCase):
     __mantissa_size, __exponent_size = 2, 3
     __sort = FloatSort(__mantissa_size,__exponent_size)

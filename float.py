@@ -380,3 +380,13 @@ def min(a : DatatypeRef, b : DatatypeRef, rounding_mode : DatatypeRef = Truncate
 # Returns a node containing a if a >= b and b else
 def max(a : DatatypeRef, b : DatatypeRef, rounding_mode : DatatypeRef = Truncate) -> DatatypeRef:
     return neg(min(neg(a), neg(b)))
+
+def Float_to_z3FP(x : DatatypeRef) -> FPRef:
+    sort = get_sort(x)
+    m,e = sizes(sort)
+    x_bv = Concat(sort.sign(x), sort.exponent(x), sort.mantissa(x))
+    return fpBVToFP(x_bv, FPSort(e+1, m)) #e+1 due to z3 including the sign bit in the exponent
+
+def z3FP_to_Float(x: FPRef) -> DatatypeRef:
+    x_bv = fpToIEEEBV(x)
+    return FloatValBV(x_bv,FloatSort(x.sbits(), x.ebits()-1))#-1 due to z3 including the sign bit in the exponent
