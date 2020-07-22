@@ -390,3 +390,23 @@ def Float_to_z3FP(x : DatatypeRef) -> FPRef:
 def z3FP_to_Float(x: FPRef) -> DatatypeRef:
     x_bv = fpToIEEEBV(x)
     return FloatValBV(x_bv,FloatSort(x.sbits(), x.ebits()-1))#-1 due to z3 including the sign bit in the exponent
+
+def rm_to_z3rm(rm: RoundingMode) -> FPRMRef:
+    switch = {
+        NearestTieToEven : RoundNearestTiesToEven(), 
+        NearestTieAwayFromZero : RoundNearestTiesToAway(), 
+        Up : RoundTowardPositive(), 
+        Down : RoundTowardNegative(), 
+        Truncate: RoundTowardZero(),
+    }
+    return switch.get(rm, -1) #Using -1 as an error return value
+
+def z3rm_to_rm(rm: RoundingMode) -> FPRMRef:
+    switch = {
+        RoundNearestTiesToEven(): NearestTieToEven,
+        RoundNearestTiesToAway(): NearestTieAwayFromZero,
+        RoundTowardPositive(): Up,
+        RoundTowardNegative(): Down,
+        RoundTowardZero(): Truncate,
+    }
+    return switch.get(rm, -1) #Using -1 as an error return value
