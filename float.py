@@ -351,7 +351,7 @@ def mul(a : DatatypeRef, b : DatatypeRef, rounding_mode : DatatypeRef = Truncate
     a_mantissa = ZeroExt(m, s.mantissa(a))
     b_mantissa = ZeroExt(m, s.mantissa(b))
     mantissa_result = a_mantissa * b_mantissa
-    underflow = Not(BVAddNoUnderflow(s.exponent(a), s.exponent(b), True))
+    underflow = Not(BVAddNoUnderflow(s.exponent(a), s.exponent(b)))
     overflow = Not(BVAddNoOverflow(s.exponent(a), s.exponent(b), True))
     exponent_result = s.exponent(a) + s.exponent(b)
     result_case = If(result_case != unpacked_normal_case, result_case, 
