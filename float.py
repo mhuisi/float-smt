@@ -384,7 +384,7 @@ def max(a : DatatypeRef, b : DatatypeRef, rounding_mode : DatatypeRef = Truncate
 def Float_to_z3FP(x : DatatypeRef) -> FPRef:
     sort = get_sort(x)
     m,e = sizes(sort)
-    x_bv = Concat(sort.sign(x), sort.exponent(x), sort.mantissa(x))
+    x_bv = to_ieee_bv(x)
     return fpBVToFP(x_bv, FPSort(e+1, m)) #e+1 due to z3 including the sign bit in the exponent
 
 def z3FP_to_Float(x: FPRef) -> DatatypeRef:
