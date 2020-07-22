@@ -50,18 +50,22 @@ def FloatValBV(bv : BitVecRef, sort : DatatypeSortRef) -> DatatypeRef:
 
 def FloatValPosInf(sort : DatatypeSortRef) -> DatatypeRef:
     m, e = sizes(sort)
-    return FloatVal(0, 0, 2**e - 1)
+    return FloatVal(0, 0, 2**e - 1, sort)
 
 def FloatValNegInf(sort : DatatypeSortRef) -> DatatypeRef:
     m, e = sizes(sort)
-    return FloatVal(1, 0, 2**e - 1)
+    return FloatVal(1, 0, 2**e - 1, sort)
 
 def FloatValNaN(sort : DatatypeSortRef, value = 1) -> DatatypeRef:
     if value == 0:
         raise ValueError("NaN value cannot be zero")
     m, e = sizes(sort)
     sign = int(value >= 0)
-    return FloatVal(sign, value, 2**e - 1)
+    return FloatVal(sign, value, 2**e - 1, sort)
+
+def FloatValZero(sort : DatatypeSortRef, sign = 0) -> DatatypeRef:
+    m, e = sizes(sort)
+    return FloatVal(sign, 0, 0, sort)
 
 def get_sort(a : DatatypeRef) -> DatatypeSortRef:
     m, e = sizes(a.sort())
@@ -83,11 +87,11 @@ def eq_bitwise(a : DatatypeRef, b : DatatypeRef) -> BoolRef:
 
 # Checks whether a is +0
 def is_pos_zero(a : DatatypeRef) -> BoolRef:
-    return eq_bitwise(a, FloatVal(0, 0, 0, get_sort(a)))
+    return eq_bitwise(a, FloatValZero(get_sort(a), 0))
 
 # Checks whether a is -0
 def is_neg_zero(a : DatatypeRef) -> BoolRef:
-    return eq_bitwise(a, FloatVal(1, 0, 0, get_sort(a)))
+    return eq_bitwise(a, FloatValZero(get_sort(a), 1))
 
 # Checks whether a is +0 or -0
 def is_zero(val : DatatypeRef) -> BoolRef:
