@@ -391,11 +391,11 @@ def Float_to_z3FP(x : DatatypeRef) -> FPRef:
     sort = get_sort(x)
     m,e = sizes(sort)
     x_bv = to_ieee_bv(x)
-    return fpBVToFP(x_bv, FPSort(e+1, m)) #e+1 due to z3 including the sign bit in the exponent
+    return fpBVToFP(x_bv, FPSort(e, m+1)) #e+1 due to z3 including the sign bit in the mantissa as its a signed bv
 
 def z3FP_to_Float(x: FPRef) -> DatatypeRef:
     x_bv = fpToIEEEBV(x)
-    return FloatValBV(x_bv,FloatSort(x.sbits(), x.ebits()-1))#-1 due to z3 including the sign bit in the exponent
+    return FloatValBV(x_bv,FloatSort(x.sbits()-1, x.ebits()))#-1 due to z3 including the sign bit in the mantissa as its a signed bv
 
 def rm_to_z3rm(rm: RoundingMode) -> FPRMRef:
     switch = {
