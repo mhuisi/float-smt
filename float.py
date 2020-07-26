@@ -225,56 +225,60 @@ def pack(f : DatatypeRef, sort : DatatypeSortRef, rounding_mode : DatatypeRef = 
     sign = s.sign(f)
     mantissa = s.mantissa(f)
     leading_zeros = utils.clz(mantissa)
+    # pad leading_zeros to the same size of old_e and old_m
     leading_zeros_padded_e = ZeroExt(e-leading_zeros.size(), leading_zeros)
     leading_zeros_padded_m = ZeroExt(mantissa.size()-leading_zeros.size(), leading_zeros)
 
+    # add bias and pad exponent to the size of old_m
     exponent = s.exponent(f) + BitVecVal(2**(e-1) - 1, e)
     exponent_padded_m = ZeroExt(mantissa.size()-exponent.size(), exponent)
+
+    # if exponent - leading_zeros underflows, the result of the operation is not representable
+    # by the float sort because the resulting exponent is too small.
+    # this is iffy. (off by 2 error?)
     normal = BVSubNoUnderflow(exponent, leading_zeros_padded_e, False)
     exponent = If(normal, exponent - leading_zeros_padded_e, BitVecVal(0, e))
 
-    amount_of_lost_bits = If(normal, m_old - m - leading_zeros_padded_m - 1 , m_old - m - exponent_padded_m - 1) #minus one due to the implicit bit
-    #remainder to be interpeted as bv not a numerical representation: so if the cut off bits were 101, the remainder would be 101000...
+    # for subnormals, not all leading zeroes are shifted out, hence we substract as many as we need to reach exponent = 0.
+    amount_of_lost_bits = If(normal, m_old - m - leading_zeros_padded_m - 1 , m_old - m - exponent_padded_m - 1) # minus one due to the implicit bit
     
-    remainder = mantissa << (mantissa.size() - amount_of_lost_bits + 1) #due to extract not working on symbolic expressions, also no need to shift back again
+    # remainder to be interpeted as bv not a numerical representation: so if the cut off bits were 101, the remainder would be 101000...
+    # why + 1?
+    remainder = mantissa << (mantissa.size() - amount_of_lost_bits + 1) # due to extract not working on symbolic expressions, also no need to shift back again
 
     mantissa = If(normal,
-        Extract(mantissa.size()-2, (mantissa.size()-1-m), mantissa << leading_zeros_padded_m),
-        Extract(mantissa.size()-2, (mantissa.size()-1-m), LShR(mantissa, exponent_padded_m))
-        )
+                  Extract(mantissa.size()-2, (mantissa.size()-1-m), mantissa << leading_zeros_padded_m),
+                  Extract(mantissa.size()-2, (mantissa.size()-1-m), LShR(mantissa, exponent_padded_m)))
 
     # Following, you'll see the biggest If-condition mess known to mankind
     half_of_max_remainder = 2**(remainder.size()-1)
     round_nearest_tie_even = If(remainder == half_of_max_remainder,
-                                    If(URem(mantissa, 2) == 1, BitVecVal(1, m), BitVecVal(0, m)),
-                                    If(UGT(remainder, half_of_max_remainder),
-                                        BitVecVal(1, m),
-                                        BitVecVal(0, m)
-                                    ))
+                                If(URem(mantissa, 2) == 1, BitVecVal(1, m), BitVecVal(0, m)),
+                                If(UGT(remainder, half_of_max_remainder),
+                                   BitVecVal(1, m),
+                                   BitVecVal(0, m)))
     round_nearest_tie_zero = If(remainder == half_of_max_remainder,
-                                    BitVecVal(0, m),
-                                    If(UGT(remainder, half_of_max_remainder),
-                                        BitVecVal(1, m),
-                                        BitVecVal(0, m)
-                                    ))
+                                BitVecVal(0, m),
+                                If(UGT(remainder, half_of_max_remainder),
+                                   BitVecVal(1, m),
+                                   BitVecVal(0, m)))
     round_up = If(UGT(remainder, 0),
-                        If(sign == 1, BitVecVal(0, m), BitVecVal(1, m)),
-                        BitVecVal(0, m)
-                    )
+                  If(sign == 1, BitVecVal(0, m), BitVecVal(1, m)),
+                  BitVecVal(0, m))
     round_down = If(UGT(remainder, 0),
-                        If(sign == 1, BitVecVal(1, m), BitVecVal(0, m)),
-                        BitVecVal(0, m)
-                    )
+                    If(sign == 1, BitVecVal(1, m), BitVecVal(0, m)),
+                    BitVecVal(0, m))
     round_truncate = BitVecVal(0, m)
 
     round_addition = If(rounding_mode == NearestTieToEven, round_nearest_tie_even,
                      If(rounding_mode == NearestTieAwayFromZero, round_nearest_tie_zero,
                      If(rounding_mode == Up, round_up,
                      If(rounding_mode == Down, round_down,
-                     If(rounding_mode == Truncate, round_truncate, 0 #The second case should not be possible
-                     )))))
+                     If(rounding_mode == Truncate, round_truncate, 0))))) # the 0 case should not be possible
     mantissa = mantissa + round_addition
     
+    # what if we overflow here?
+
     return FloatVar(sign, mantissa, exponent, sort)
 
 # Adds the floating point values a & b
@@ -336,6 +340,7 @@ def mul(a : DatatypeRef, b : DatatypeRef, rounding_mode : DatatypeRef = Truncate
 
     case_a, a = unpack(a)
     case_b, b = unpack(b)
+
     # handle some special cases preemptively so we don't
     # accidentally lose that information during the operation
     result_case = If(Or(case_a == nan_case, 
@@ -348,6 +353,7 @@ def mul(a : DatatypeRef, b : DatatypeRef, rounding_mode : DatatypeRef = Truncate
                   If(Or(case_a == zero_case, case_b == zero_case),
                      zero_case,
                      unpacked_normal_case))) # could still be zero or inf instead after the operation (underflow or overflow)
+                     
     s = get_sort(a)
     m, e = sizes(s)
     a_mantissa = ZeroExt(m, s.mantissa(a))
@@ -359,7 +365,7 @@ def mul(a : DatatypeRef, b : DatatypeRef, rounding_mode : DatatypeRef = Truncate
     result_case = If(result_case != unpacked_normal_case, result_case, 
                   If(underflow, zero_case, 
                   If(overflow, inf_case, unpacked_normal_case)))
-    result_sign = If(s.sign(a) == s.sign(b), BitVecVal(0, 1), BitVecVal(1, 1))
+    result_sign = Xor(s.sign(a), s.sign(b))
 
     new_sort = FloatSort(mantissa_result.size(), exponent_result.size())
 
@@ -367,7 +373,40 @@ def mul(a : DatatypeRef, b : DatatypeRef, rounding_mode : DatatypeRef = Truncate
     return result
 
 # Divides a by b
-def div(a : DatatypeRef, b : DatatypeRef, rounding_mode : DatatypeRef = Truncate) -> DatatypeRef: pass
+def div(a : DatatypeRef, b : DatatypeRef, rounding_mode : DatatypeRef = Truncate) -> DatatypeRef:
+    ensure_eq_sort(a, b)
+    result_sort = get_sort(a)
+
+    case_a, a = unpack(a)
+    case_b, b = unpack(b)
+
+    result_case = If(Or(case_a == nan_case, 
+                        case_b == nan_case, 
+                        And(case_a == zero_case, case_b == zero_case), 
+                        And(case_a == inf_case, case_b == inf_case)),
+                     nan_case,
+                  If(Or(case_a == inf_case, case_b == zero_case), 
+                     inf_case,
+                  If(Or(case_a == zero_case, case_b == inf_case),
+                     zero_case,
+                     unpacked_normal_case)))
+
+    s = get_sort(a)
+    mantissa_quotient = UDiv(s.mantissa(a), s.mantissa(b))
+    mantissa_reminder = URem(s.mantissa(a), s.mantissa(b))
+    mantissa_result = Concat(mantissa_quotient, mantissa_reminder)
+
+    underflow = Not(BVSubNoUnderflow(s.exponent(a), s.exponent(b), True))
+    overflow = Not(BVSubNoOverflow(s.exponent(a), s.exponent(b)))
+    exponent_result = s.exponent(a) - s.exponent(b)
+
+    result_case = If(result_case != unpacked_normal_case, result_case, 
+                  If(underflow, zero_case, 
+                  If(overflow, inf_case, unpacked_normal_case)))
+    result_sign = Xor(s.sign(a), s.sign(b))
+    new_sort = FloatSort(mantissa_result.size(), exponent_result.size())
+    result = pack(FloatVar(result_sign, mantissa_result, exponent_result, new_sort), result_sort, rounding_mode)
+    return result
 
 # Performs the operation a modulo b
 def rem(a : DatatypeRef, b : DatatypeRef, rounding_mode : DatatypeRef = Truncate) -> DatatypeRef: pass
