@@ -353,22 +353,24 @@ def mul(a : DatatypeRef, b : DatatypeRef, rounding_mode : DatatypeRef = Truncate
                   If(Or(case_a == zero_case, case_b == zero_case),
                      zero_case,
                      unpacked_normal_case))) # could still be zero or inf instead after the operation (underflow or overflow)
-                     
+
     s = get_sort(a)
     m, e = sizes(s)
+
     a_mantissa = ZeroExt(m, s.mantissa(a))
     b_mantissa = ZeroExt(m, s.mantissa(b))
     mantissa_result = a_mantissa * b_mantissa
+
     underflow = Not(BVAddNoUnderflow(s.exponent(a), s.exponent(b)))
     overflow = Not(BVAddNoOverflow(s.exponent(a), s.exponent(b), True))
     exponent_result = s.exponent(a) + s.exponent(b)
+
     result_case = If(result_case != unpacked_normal_case, result_case, 
                   If(underflow, zero_case, 
                   If(overflow, inf_case, unpacked_normal_case)))
+
     result_sign = Xor(s.sign(a), s.sign(b))
-
     new_sort = FloatSort(mantissa_result.size(), exponent_result.size())
-
     result = pack(FloatVar(result_sign, mantissa_result, exponent_result, new_sort), result_sort, rounding_mode)
     return result
 
@@ -392,9 +394,29 @@ def div(a : DatatypeRef, b : DatatypeRef, rounding_mode : DatatypeRef = Truncate
                      unpacked_normal_case)))
 
     s = get_sort(a)
-    mantissa_quotient = UDiv(s.mantissa(a), s.mantissa(b))
-    mantissa_reminder = URem(s.mantissa(a), s.mantissa(b))
-    mantissa_result = Concat(mantissa_quotient, mantissa_reminder)
+    m, e = sizes(s)
+
+    # the division of the mantissas is badly behaved wrt rounding.
+    # dividing two large mantissas 1xx...x and 1xx...x may yield a very small
+    # result mantissa (e.g. 1 if they are equal). in the worst case, to normalize
+    # the number, we need to shift the result mantissa the full m bits.
+    # hence, when rounding, we need at least m additional bits for the normalization
+    # alone, and then one additional guard- and sticky bit for rounding.
+    # we gain this additional precision by extending the numerator by m+1 bits (bits to shift + guard bit)
+    # and then calculate the sticky bit using the remainder of the division.
+    a_mantissa = Concat(s.mantissa(a), BitVecVal(0, m+1))
+    b_mantissa = ZeroExt(m+1, s.mantissa(b))
+
+    # yields a number where the most significant m bits are the quotient
+    # and the rest are the remainder (bits for normalization & guard bit)
+    padded_quotient = UDiv(a_mantissa, b_mantissa)
+    # used to calculate the sticky bit
+    padded_remainder = URem(s.mantissa(a), s.mantissa(b))
+
+    quotient = Extract(padded_quotient.size()-1, m+1, padded_quotient)
+    remainder = Extract(m, 0, padded_quotient)
+    sticky_bit = If(padded_remainder == 0, BitVecVal(0, 1), BitVecVal(1, 1))
+    mantissa_result = Concat(quotient, remainder, sticky_bit)
 
     underflow = Not(BVSubNoUnderflow(s.exponent(a), s.exponent(b), True))
     overflow = Not(BVSubNoOverflow(s.exponent(a), s.exponent(b)))
@@ -403,6 +425,7 @@ def div(a : DatatypeRef, b : DatatypeRef, rounding_mode : DatatypeRef = Truncate
     result_case = If(result_case != unpacked_normal_case, result_case, 
                   If(underflow, zero_case, 
                   If(overflow, inf_case, unpacked_normal_case)))
+    
     result_sign = Xor(s.sign(a), s.sign(b))
     new_sort = FloatSort(mantissa_result.size(), exponent_result.size())
     result = pack(FloatVar(result_sign, mantissa_result, exponent_result, new_sort), result_sort, rounding_mode)
