@@ -212,9 +212,9 @@ def unpack(f : DatatypeRef) -> (DatatypeRef, DatatypeRef):
               unpacked_normal_case)))
     extended_subnormal = FloatVar(sign, ZeroExt(1, mantissa), exponent, new_sort)
     extended_normal = FloatVar(sign, Concat(BitVecVal(1, 1), mantissa), exponent, new_sort)
-    return case, If(is_subnormal(f), extended_subnormal, extended_normal)
+    return case, If(Or(is_subnormal(f), is_zero(f)), extended_subnormal, extended_normal)
 
-def pack(f : DatatypeRef, sort : DatatypeSortRef, rounding_mode : DatatypeRef = Truncate) -> DatatypeRef:
+def pack(f : DatatypeRef, sort : DatatypeSortRef, rounding_mode : DatatypeRef = Truncate, case : DatatypeRef = unpacked_normal_case) -> DatatypeRef:
     # the mantissa of f is of the form 0...01x...xy...y, where 1x...x are the first m bits of the mantissa (m is the mantissa size in sort),
     # and y...y is the remainder.
     # the sign in f should be correct independent of the case.
@@ -228,15 +228,17 @@ def pack(f : DatatypeRef, sort : DatatypeSortRef, rounding_mode : DatatypeRef = 
     leading_zeros_padded_e = ZeroExt(e-leading_zeros.size(), leading_zeros)
     leading_zeros_padded_m = ZeroExt(mantissa.size()-leading_zeros.size(), leading_zeros)
 
-    exponent = s.exponent(f) + BitVecVal(2**(e-1) - 1, e)
-    exponent_padded_m = ZeroExt(mantissa.size()-exponent.size(), exponent)
-    normal = BVSubNoUnderflow(exponent, leading_zeros_padded_e, False)
-    exponent = If(normal, exponent - leading_zeros_padded_e, BitVecVal(0, e))
+    exponent = s.exponent(f) - BitVecVal(2**(e-1) - 1, e) #exponent = s.exponent(f) + BitVecVal(2**(e-1) - 1, e)
+    
 
-    amount_of_lost_bits = If(normal, m_old - m - leading_zeros_padded_m - 1 , m_old - m - exponent_padded_m - 1) #minus one due to the implicit bit
+
+    normal = BVSubNoUnderflow(exponent, leading_zeros_padded_e, False)
+    exponent = If(normal, exponent - leading_zeros_padded_e, BitVecVal(0, e)) #+1
+    exponent_padded_m = ZeroExt(mantissa.size() - exponent.size(), exponent)
+    amount_of_lost_bits = If(normal, m_old - m - leading_zeros_padded_m - 1, m_old - m - exponent_padded_m - 1) #minus one due to the implicit bit
     #remainder to be interpeted as bv not a numerical representation: so if the cut off bits were 101, the remainder would be 101000...
     
-    remainder = mantissa << (mantissa.size() - amount_of_lost_bits + 1) #due to extract not working on symbolic expressions, also no need to shift back again
+    remainder = mantissa << (mantissa.size() - amount_of_lost_bits) #+ 1) #due to extract not working on symbolic expressions, also no need to shift back again
 
     mantissa = If(normal,
         Extract(mantissa.size()-2, (mantissa.size()-1-m), mantissa << leading_zeros_padded_m),
@@ -275,6 +277,12 @@ def pack(f : DatatypeRef, sort : DatatypeSortRef, rounding_mode : DatatypeRef = 
                      )))))
     mantissa = mantissa + round_addition
     
+    exponent = If(case == zero_case, BitVecVal(0, e), exponent)
+    exponent = If(case == inf_case, BitVecVal(2**(e+1)-1, e), exponent)
+    exponent = If(case == nan_case, BitVecVal(2**(e+1)-1, e), exponent)
+    mantissa = If(case == zero_case, BitVecVal(0, m), mantissa)
+    mantissa = If(case == nan_case, BitVecVal(1, m), mantissa)
+    mantissa = If(case == inf_case, BitVecVal(0, m), mantissa)
     return FloatVar(sign, mantissa, exponent, sort)
 
 # Adds the floating point values a & b
@@ -334,6 +342,11 @@ def mul(a : DatatypeRef, b : DatatypeRef, rounding_mode : DatatypeRef = Truncate
     ensure_eq_sort(a, b)
     result_sort = get_sort(a)
 
+    old_s = get_sort(a)
+    old_m, old_e = sizes(old_s)
+    exp_below_0_a = ULT(result_sort.exponent(a), (2**(old_e-1)-1))
+    exp_below_0_b = ULT(result_sort.exponent(b), (2**(old_e-1)-1))
+
     case_a, a = unpack(a)
     case_b, b = unpack(b)
     # handle some special cases preemptively so we don't
@@ -353,9 +366,14 @@ def mul(a : DatatypeRef, b : DatatypeRef, rounding_mode : DatatypeRef = Truncate
     a_mantissa = ZeroExt(m, s.mantissa(a))
     b_mantissa = ZeroExt(m, s.mantissa(b))
     mantissa_result = a_mantissa * b_mantissa
-    underflow = Not(BVAddNoUnderflow(s.exponent(a), s.exponent(b)))
+    #underflow = Not(BVAddNoUnderflow(s.exponent(a), s.exponent(b)))
     overflow = Not(BVAddNoOverflow(s.exponent(a), s.exponent(b), True))
-    exponent_result = s.exponent(a) + s.exponent(b)
+    exponent_result = s.exponent(a) + s.exponent(b) - 1
+
+    underflow = And(
+        And(exp_below_0_a,exp_below_0_b),
+        Not(BVSubNoUnderflow(exponent_result + old_m, 2**(exponent_result.size()-1), False))
+    )
     result_case = If(result_case != unpacked_normal_case, result_case, 
                   If(underflow, zero_case, 
                   If(overflow, inf_case, unpacked_normal_case)))
@@ -363,7 +381,7 @@ def mul(a : DatatypeRef, b : DatatypeRef, rounding_mode : DatatypeRef = Truncate
 
     new_sort = FloatSort(mantissa_result.size(), exponent_result.size())
 
-    result = pack(FloatVar(result_sign, mantissa_result, exponent_result, new_sort), result_sort, rounding_mode)
+    result = pack(FloatVar(result_sign, mantissa_result, exponent_result, new_sort), result_sort, rounding_mode, result_case)
     return result
 
 # Divides a by b
