@@ -224,25 +224,27 @@ def pack(f : DatatypeRef, sort : DatatypeSortRef, rounding_mode : DatatypeRef = 
     m, e = sizes(sort)
     sign = s.sign(f)
     mantissa = s.mantissa(f)
-    leading_zeros = utils.clz(mantissa)
-    leading_zeros_padded_e = ZeroExt(e-leading_zeros.size(), leading_zeros)
-    leading_zeros_padded_m = ZeroExt(mantissa.size()-leading_zeros.size(), leading_zeros)
 
-    exponent = s.exponent(f) - BitVecVal(2**(e-1) - 1, e) #exponent = s.exponent(f) + BitVecVal(2**(e-1) - 1, e)
+    exponent = s.exponent(f) - BitVecVal(2**(e-1) - 1, e)
+    exponent_padded = ZeroExt(mantissa.size() - e_old, exponent)
+
+    leading_zeros = utils.clz(mantissa)
+    leading_zeros_padded = ZeroExt(mantissa.size()-leading_zeros.size(), leading_zeros)
+
+     #exponent = s.exponent(f) + BitVecVal(2**(e-1) - 1, e)
     
 
 
-    normal = BVSubNoUnderflow(exponent, leading_zeros_padded_e, False)
-    exponent = If(normal, exponent - leading_zeros_padded_e, BitVecVal(0, e)) #+1
-    exponent_padded_m = ZeroExt(mantissa.size() - exponent.size(), exponent)
-    amount_of_lost_bits = If(normal, m_old - m - leading_zeros_padded_m - 1, m_old - m - exponent_padded_m - 1) #minus one due to the implicit bit
+    normal = BVSubNoUnderflow(exponent_padded, leading_zeros_padded, False)
+    exponent_padded = If(normal, exponent_padded - leading_zeros_padded, BitVecVal(0, m_old)) #+1
+    amount_of_lost_bits = If(normal, m_old - m - leading_zeros_padded - 1, m_old - m - exponent_padded - 1) #minus one due to the implicit bit
     #remainder to be interpeted as bv not a numerical representation: so if the cut off bits were 101, the remainder would be 101000...
     
     remainder = mantissa << (mantissa.size() - amount_of_lost_bits) #+ 1) #due to extract not working on symbolic expressions, also no need to shift back again
 
     mantissa = If(normal,
-        Extract(mantissa.size()-2, (mantissa.size()-1-m), mantissa << leading_zeros_padded_m),
-        Extract(mantissa.size()-2, (mantissa.size()-1-m), LShR(mantissa, exponent_padded_m))
+        Extract(mantissa.size()-2, (mantissa.size()-1-m), mantissa << leading_zeros_padded),
+        Extract(mantissa.size()-2, (mantissa.size()-1-m), LShR(mantissa, exponent_padded))
         )
 
     # Following, you'll see the biggest If-condition mess known to mankind
@@ -277,6 +279,9 @@ def pack(f : DatatypeRef, sort : DatatypeSortRef, rounding_mode : DatatypeRef = 
                      )))))
     mantissa = mantissa + round_addition
     
+
+    exponent = Extract(e-1,0,exponent_padded) #unpad
+
     exponent = If(case == zero_case, BitVecVal(0, e), exponent)
     exponent = If(case == inf_case, BitVecVal(2**(e+1)-1, e), exponent)
     exponent = If(case == nan_case, BitVecVal(2**(e+1)-1, e), exponent)
