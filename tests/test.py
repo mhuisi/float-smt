@@ -246,19 +246,19 @@ class Operations(unittest.TestCase):
         rm = Truncate
         a = FloatVal(0,7503853,140, FloatSort(23,8))
         b = FloatVal(0,126166,145, FloatSort(23,8))
-        x = simplify(Float_to_z3FP(mul(a, b,rm)))
-        y = simplify(fpMul(rm_to_z3rm(rm), Float_to_z3FP(a), Float_to_z3FP(b)))
+        x = simplify(Float_to_z3FP(add(a, b,rm)))
+        y = simplify(fpAdd(rm_to_z3rm(rm), Float_to_z3FP(a), Float_to_z3FP(b)))
         print(x)
         print(y)
         self.assertTrue(x==y)
 
-        # a = FloatVal(0,7503853,70, FloatSort(23,8))
-        # b = FloatVal(1,126166,70, FloatSort(23,8))
-        # x = simplify(Float_to_z3FP(add(a, b,rm)))
-        # y = simplify(fpAdd(rm_to_z3rm(rm), Float_to_z3FP(a), Float_to_z3FP(b)))
-        # print(x)
-        # print(y)
-        # self.assertTrue(x==y)
+        a = FloatVal(0,7503853,70, FloatSort(23,8))
+        b = FloatVal(1,126166,70, FloatSort(23,8))
+        x = simplify(Float_to_z3FP(add(a, b,rm)))
+        y = simplify(fpAdd(rm_to_z3rm(rm), Float_to_z3FP(a), Float_to_z3FP(b)))
+        print(x)
+        print(y)
+        self.assertTrue(x==y)
 
         a = FloatVal(0,7503853,140, FloatSort(23,8))
         b = FloatVal(1,126166,70, FloatSort(23,8))
@@ -278,10 +278,19 @@ class Operations(unittest.TestCase):
         print(y)
         self.assertTrue(x==y)
 
+
+        a = FloatVal(0,32,0, FloatSort(10,5))
+        b = FloatVal(0,5,4, FloatSort(10,5))
+        x = simplify(Float_to_z3FP(add(a, b,rm)))
+        y = simplify(fpAdd(rm_to_z3rm(rm), Float_to_z3FP(a), Float_to_z3FP(b)))
+        print(x)
+        print(y)
+        self.assertTrue(x==y)
+
         x, y = FloatConst("x", 10, 5), FloatConst("y", 10, 5)
         x_z3, y_z3 = Float_to_z3FP(x), Float_to_z3FP(y)
 
-        for rm in (Up, Down, Truncate, NearestTieToEven, NearestTieAwayFromZero):
+        for rm in (Truncate, Up, Down, NearestTieToEven, NearestTieAwayFromZero):
             result = validate(
                 Or(
                     ( Float_to_z3FP(add(x, y, rm)) == fpAdd(rm_to_z3rm(rm), x_z3, y_z3) ),
@@ -500,16 +509,16 @@ class Operations(unittest.TestCase):
     def test_pack(self):
 
         case, unpacked = unpack(self.__pos_zero)
-        self.true(eq_bitwise(pack(unpacked, self.__sort, Truncate), self.__pos_zero))
+        self.true(eq_bitwise(pack(unpacked, self.__sort, Truncate, zero_case), self.__pos_zero))
 
         case, unpacked = unpack(self.__neg_zero)
-        self.true(eq_bitwise(pack(unpacked, self.__sort,Truncate), self.__neg_zero))
+        self.true(eq_bitwise(pack(unpacked, self.__sort,Truncate, zero_case), self.__neg_zero))
 
         case, unpacked = unpack(self.__pos_inf)
-        self.true(eq_bitwise(pack(unpacked, self.__sort, Truncate), self.__pos_inf))
+        self.true(eq_bitwise(pack(unpacked, self.__sort, Truncate, inf_case), self.__pos_inf))
 
         case, unpacked = unpack(self.__neg_inf)
-        self.true(eq_bitwise(pack(unpacked, self.__sort, Truncate), self.__neg_inf))
+        self.true(eq_bitwise(pack(unpacked, self.__sort, Truncate, inf_case), self.__neg_inf))
 
         case, unpacked = unpack(self.__normal5)
         self.true(eq_bitwise(pack(unpacked, self.__sort, Truncate), self.__normal5))
@@ -518,7 +527,7 @@ class Operations(unittest.TestCase):
         self.true(eq_bitwise(pack(unpacked, self.__sort, Truncate), self.__normal6))
 
         case, unpacked = unpack(self.__nan1)
-        self.true(eq_bitwise(pack(unpacked, self.__sort, Truncate), self.__nan1))
+        self.true(eq_bitwise(pack(unpacked, self.__sort, Truncate, nan_case), self.__nan1))
 
         case, unpacked = unpack(self.__normal1)
         self.true(eq_bitwise(pack(unpacked, self.__sort, Truncate), self.__normal1))
@@ -540,6 +549,13 @@ class Operations(unittest.TestCase):
 
         case, unpacked = unpack(self.__subnormal2)
         self.true(eq_bitwise(pack(unpacked, self.__sort, Truncate), self.__subnormal2))
+
+
+        x = FloatVal(0,0,0, FloatSort(5, 5))
+        case, unpacked = unpack(x)
+        result = validate(eq_bitwise(pack(unpacked, FloatSort(5, 5), Truncate), x))
+        self.assertTrue(result)
+        
 
         x = FloatConst("x", 5, 5)
         case, unpacked = unpack(x)

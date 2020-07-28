@@ -210,9 +210,12 @@ def unpack(f : DatatypeRef) -> (DatatypeRef, DatatypeRef):
            If(is_inf(f), inf_case, 
            If(is_zero(f), zero_case,
               unpacked_normal_case)))
-    extended_subnormal = FloatVar(sign, ZeroExt(1, mantissa), exponent, new_sort)
+    extended_subnormal = FloatVar(sign, ZeroExt(1, mantissa), exponent + 1, new_sort)
+    extended_zero = FloatVar(sign, ZeroExt(1, mantissa), exponent, new_sort)
     extended_normal = FloatVar(sign, Concat(BitVecVal(1, 1), mantissa), exponent, new_sort)
-    return case, If(Or(is_subnormal(f), is_zero(f)), extended_subnormal, extended_normal)
+    return case, If(is_subnormal(f), extended_subnormal, 
+        If(is_zero(f), extended_zero, extended_normal)
+    )
 
 def pack(f : DatatypeRef, sort : DatatypeSortRef, rounding_mode : DatatypeRef = Truncate, case : DatatypeRef = unpacked_normal_case) -> DatatypeRef:
     # the mantissa of f is of the form 0...01x...xy...y, where 1x...x are the first m bits of the mantissa (m is the mantissa size in sort),
@@ -225,7 +228,10 @@ def pack(f : DatatypeRef, sort : DatatypeSortRef, rounding_mode : DatatypeRef = 
     sign = s.sign(f)
     mantissa = s.mantissa(f)
 
-    exponent = s.exponent(f) - BitVecVal(2**(e-1) - 1, e)
+    exponent = s.exponent(f) + BitVecVal(2**(e-1) - 1, e)#
+
+    case = If(And(exponent == 0, mantissa == 0), zero_case, case)
+
     exponent_padded = ZeroExt(mantissa.size() - e_old, exponent)
 
     leading_zeros = utils.clz(mantissa)
@@ -235,9 +241,9 @@ def pack(f : DatatypeRef, sort : DatatypeSortRef, rounding_mode : DatatypeRef = 
     
 
 
-    normal = BVSubNoUnderflow(exponent_padded, leading_zeros_padded, False)
+    normal = BVSubNoUnderflow(exponent_padded - 1, leading_zeros_padded, False)
     exponent_padded = If(normal, exponent_padded - leading_zeros_padded, BitVecVal(0, m_old)) #+1
-    amount_of_lost_bits = If(normal, m_old - m - leading_zeros_padded - 1, m_old - m - exponent_padded - 1) #minus one due to the implicit bit
+    amount_of_lost_bits = If(normal, m_old - m - leading_zeros_padded - 1, m_old - m - exponent_padded - 2) #minus one due to the implicit bit
     #remainder to be interpeted as bv not a numerical representation: so if the cut off bits were 101, the remainder would be 101000...
     
     remainder = mantissa << (mantissa.size() - amount_of_lost_bits) #+ 1) #due to extract not working on symbolic expressions, also no need to shift back again
@@ -322,8 +328,8 @@ def add(a : DatatypeRef, b : DatatypeRef, rounding_mode : DatatypeRef = Truncate
     overflow = Not(BVAddNoOverflow(mantissa_x, mantissa_y_shifted, False))
     exponent_result = If(overflow, old_sort.exponent(x) + 1, old_sort.exponent(x))
 
-    mantissa_y_shifted = If(overflow, LShR(mantissa_y_shifted, 1), mantissa_y_shifted)
-    mantissa_x = If(overflow, LShR(mantissa_x, 1), mantissa_x)
+    mantissa_y_shifted = If(overflow, ZeroExt(1, mantissa_y_shifted), mantissa_y_shifted)
+    mantissa_x = If(overflow, ZeroExt(1, mantissa_x), mantissa_x)
 
     #Compute mantissa
     mantissa_result = If(old_sort.sign(x) + old_sort.sign(y) == 1, mantissa_x - mantissa_y_shifted, mantissa_x + mantissa_y_shifted)
