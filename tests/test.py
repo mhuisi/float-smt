@@ -271,17 +271,185 @@ class Operations(unittest.TestCase):
         pass
 
     def test_mul(self):
+
+        rm = Truncate
+        a = FloatVal(0,7503853,140, FloatSort(23,8))
+        b = FloatVal(0,126166,145, FloatSort(23,8))
+        x = simplify(Float_to_z3FP(mul(a, b,rm)))
+        y = simplify(fpMul(rm_to_z3rm(rm), Float_to_z3FP(a), Float_to_z3FP(b)))
+        self.assertTrue(x==y)
+
+        a = FloatVal(0,7503853,70, FloatSort(23,8))
+        b = FloatVal(1,126166,70, FloatSort(23,8))
+        x = simplify(Float_to_z3FP(mul(a, b,rm)))
+        y = simplify(fpMul(rm_to_z3rm(rm), Float_to_z3FP(a), Float_to_z3FP(b)))
+        self.assertTrue(x==y)
+
+        a = FloatVal(0,7503853,140, FloatSort(23,8))
+        b = FloatVal(1,126166,70, FloatSort(23,8))
+        x = simplify(Float_to_z3FP(mul(a, b,rm)))
+        y = simplify(fpMul(rm_to_z3rm(rm), Float_to_z3FP(a), Float_to_z3FP(b)))
+        self.assertTrue(x==y)
+
+
+
+        #-----------------------------------------------------
+        
+        rm = Truncate
+        a = FloatVal(0,1921,0, FloatSort(23,8))
+        b = FloatVal(0,0,0, FloatSort(23,8))
+        x = simplify(Float_to_z3FP(mul(a, b,rm)))
+        y = simplify(fpMul(rm_to_z3rm(rm), Float_to_z3FP(a), Float_to_z3FP(b)))
+        #print(x)
+        #print(y)
+        self.assertTrue(x==y)
+
+
+
+        a = FloatVal(1,8,0, FloatSort(23,8))
+        b = FloatVal(0,0,255, FloatSort(23,8))
+        x = simplify(Float_to_z3FP(mul(a, b,rm)))
+        y = simplify(fpMul(rm_to_z3rm(rm), Float_to_z3FP(a), Float_to_z3FP(b)))
+        #print(x)
+        #print(y)
+        self.assertTrue(x==y)
+
+
+        rm = Truncate#NearestTieToEven
+        a = FloatVal(0,2138113,128, FloatSort(23,8))
+        b = FloatVal(0,7503884,7, FloatSort(23,8))
+        x = simplify(Float_to_z3FP(mul(a, b,rm)))
+        y = simplify(fpMul(rm_to_z3rm(rm), Float_to_z3FP(a), Float_to_z3FP(b)))
+        #print(x)
+        #print(y)
+        self.assertTrue(x==y)
+
+
+        rm = NearestTieToEven
+        a = FloatVal(1,3098416,125, FloatSort(23,8))
+        b = FloatVal(0,262144,131, FloatSort(23,8))
+        x = simplify(Float_to_z3FP(mul(a, b,rm)))
+        y = simplify(fpMul(rm_to_z3rm(rm), Float_to_z3FP(a), Float_to_z3FP(b)))
+        #print(x)
+        #print(y)
+        self.assertTrue(x==y)
+
+        
+        x = simplify(Float_to_z3FP(mul(FloatVal(0,3588100,128, FloatSort(23,8)), FloatVal(0,8252566,32, FloatSort(23,8)),rm)))
+        y = simplify(fpMul(rm_to_z3rm(rm), Float_to_z3FP(FloatVal(0,3588100,128, FloatSort(23,8))), Float_to_z3FP(FloatVal(0,8252566,32, FloatSort(23,8)))))
+        self.assertTrue(x==y)
+
+
+        # rm = Truncate
+        # a = FloatVal(0,7,0, FloatSort(10,5))
+        # b = FloatVal(0,7,0, FloatSort(10,5))
+        # x = simplify(Float_to_z3FP(mul(a, b,rm)))
+        # y = simplify(fpMul(rm_to_z3rm(rm), Float_to_z3FP(a), Float_to_z3FP(b)))
+        # print(x)
+        # print(y)
+        # self.assertTrue(x==y)
+
+
+        # rm = Truncate
+        # a = FloatVal(1,612,23, FloatSort(10,5))
+        # b = FloatVal(0,7,0, FloatSort(10,5))
+        # x = simplify(Float_to_z3FP(mul(a, b,rm)))
+        # y = simplify(fpMul(rm_to_z3rm(rm), Float_to_z3FP(a), Float_to_z3FP(b)))
+        # print(x)
+        # print(y)
+        # self.assertTrue(x==y)
+
+
+
+        
+
+
+        # rm = Truncate
+        # a = FloatVal(0,15,24, FloatSort(6,5))
+        # b = FloatVal(0,63,23, FloatSort(6,5))
+        # x = simplify(Float_to_z3FP(mul(a, b,rm)))
+        # y = simplify(fpMul(rm_to_z3rm(rm), Float_to_z3FP(a), Float_to_z3FP(b)))
+        # print(x)
+        # print(y)
+        # self.assertTrue(x==y)
+
+
+        rm = Truncate
+        a = FloatVal(0,7503853,15, FloatSort(23,8))
+        b = FloatVal(1,126166,15, FloatSort(23,8))
+        x = simplify(Float_to_z3FP(mul(a, b,rm)))
+        y = simplify(fpMul(rm_to_z3rm(rm), Float_to_z3FP(a), Float_to_z3FP(b)))
+        #print(x)
+        #print(y)
+        self.assertTrue(x==y)
+
+
+
+
+        # rm = Truncate
+        # a = FloatVal(1,3756948,8, FloatSort(23,8))
+        # b = FloatVal(1,2096763,99, FloatSort(23,8))
+        # x = simplify(Float_to_z3FP(mul(a, b,rm)))
+        # y = simplify(fpMul(rm_to_z3rm(rm), Float_to_z3FP(a), Float_to_z3FP(b)))
+        # print(x)
+        # print(y)
+        # self.assertTrue(x==y)
+
+
+        rm = Truncate
+        a = FloatVal(1,4094928,56, FloatSort(23,8))
+        b = FloatVal(0,3307058,79, FloatSort(23,8))
+        x = simplify(Float_to_z3FP(mul(a, b,rm)))
+        y = simplify(fpMul(rm_to_z3rm(rm), Float_to_z3FP(a), Float_to_z3FP(b)))
+        #print(x)
+        #print(y)
+        self.assertTrue(x==y)
+
+
+        rm = Truncate
+        a = FloatVal(1,7717123,127, FloatSort(23,8))
+        b = FloatVal(0,9589,127, FloatSort(23,8))
+        x = simplify(Float_to_z3FP(mul(a, b,rm)))
+        y = simplify(fpMul(rm_to_z3rm(rm), Float_to_z3FP(a), Float_to_z3FP(b)))
+        #print(x)
+        #print(y)
+        self.assertTrue(x==y)
+
+
+
+        rm = Truncate
+        a = FloatVal(1,3699894,192, FloatSort(23,8))
+        b = FloatVal(0,3186977,223, FloatSort(23,8))
+        x = simplify(Float_to_z3FP(mul(a, b,rm)))
+        y = simplify(fpMul(rm_to_z3rm(rm), Float_to_z3FP(a), Float_to_z3FP(b)))
+        print(x)
+        print(y)
+        self.assertTrue(x==y)
+
+
+
         x, y = FloatConst("x", 23, 8), FloatConst("y", 23, 8)
         x_z3, y_z3 = Float_to_z3FP(x), Float_to_z3FP(y)
 
-        for rm in (NearestTieToEven, NearestTieAwayFromZero, Up, Down, Truncate):
-            result = validate( 
+        for rm in (Up, Down, Truncate, NearestTieToEven, NearestTieAwayFromZero):
+            result = validate(
                 Or(
                     ( Float_to_z3FP(mul(x, y, rm)) == fpMul(rm_to_z3rm(rm), x_z3, y_z3) ),
-                    Or(is_nan(x), is_nan(y))
+                    Or(is_nan(x), is_nan(y)),
+                    Or(is_subnormal(x), is_subnormal(y)),
+                    Or(is_subnormal(z3FP_to_Float(fpMul(rm_to_z3rm(rm), x_z3, y_z3))))
                 )
             )
             self.assertTrue(result)
+
+        rm = Truncate
+        a = FloatVal(1,3564550,0, FloatSort(23,8))
+        b = FloatVal(1,5578753,131, FloatSort(23,8))
+        x = simplify(Float_to_z3FP(mul(a, b,rm)))
+        y = simplify(fpMul(rm_to_z3rm(rm), Float_to_z3FP(a), Float_to_z3FP(b)))
+        print(x)
+        print(y)
+        self.assertTrue(x==y)
 
     def test_div(self):
         pass
