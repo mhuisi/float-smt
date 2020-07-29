@@ -210,9 +210,12 @@ def unpack(f : DatatypeRef) -> (DatatypeRef, DatatypeRef):
            If(is_inf(f), inf_case, 
            If(is_zero(f), zero_case,
               unpacked_normal_case)))
-    extended_subnormal = FloatVar(sign, ZeroExt(1, mantissa), exponent, new_sort)
+    extended_subnormal = FloatVar(sign, ZeroExt(1, mantissa), exponent + 1, new_sort)
+    extended_zero = FloatVar(sign, ZeroExt(1, mantissa), exponent, new_sort)
     extended_normal = FloatVar(sign, Concat(BitVecVal(1, 1), mantissa), exponent, new_sort)
-    return case, If(Or(is_subnormal(f), is_zero(f)), extended_subnormal, extended_normal)
+    return case, If(is_subnormal(f), extended_subnormal, 
+        If(is_zero(f), extended_zero, extended_normal)
+    )
 
 def round(sign : DatatypeRef, val : DatatypeRef, remainder : DatatypeRef, rounding_mode : DatatypeRef = Truncate) -> (DatatypeRef, DatatypeRef):
     m = val.size()
@@ -256,7 +259,10 @@ def pack(f : DatatypeRef, sort : DatatypeSortRef, rounding_mode : DatatypeRef = 
     sign = s.sign(f)
     mantissa = s.mantissa(f)
 
-    exponent = s.exponent(f) - BitVecVal(2**(e-1) - 1, e)
+    exponent = s.exponent(f) + BitVecVal(2**(e-1) - 1, e)#
+
+    case = If(And(exponent == 0, mantissa == 0), zero_case, case)
+
     exponent_padded = ZeroExt(mantissa.size() - e_old, exponent)
 
     leading_zeros = utils.clz(mantissa)
@@ -266,9 +272,9 @@ def pack(f : DatatypeRef, sort : DatatypeSortRef, rounding_mode : DatatypeRef = 
     
 
 
-    normal = BVSubNoUnderflow(exponent_padded, leading_zeros_padded, False)
+    normal = BVSubNoUnderflow(exponent_padded - 1, leading_zeros_padded, False)
     exponent_padded = If(normal, exponent_padded - leading_zeros_padded, BitVecVal(0, m_old)) #+1
-    amount_of_lost_bits = If(normal, m_old - m - leading_zeros_padded - 1, m_old - m - exponent_padded - 1) #minus one due to the implicit bit
+    amount_of_lost_bits = If(normal, m_old - m - leading_zeros_padded - 1, m_old - m - exponent_padded - 2) #minus one due to the implicit bit
     #remainder to be interpeted as bv not a numerical representation: so if the cut off bits were 101, the remainder would be 101000...
     
     remainder = mantissa << (mantissa.size() - amount_of_lost_bits) #+ 1) #due to extract not working on symbolic expressions, also no need to shift back again
@@ -296,21 +302,23 @@ def add(a : DatatypeRef, b : DatatypeRef, rounding_mode : DatatypeRef = Truncate
     ensure_eq_sort(a, b)
     
     #Unpack the floats and put the (absolute) bigger one into x:
-    
+    sort = get_sort(a)
     x = If(gt(abs(a), abs(b)), a, b)
     y = If(gt(abs(a), abs(b)), b, a)
     case_x, x = unpack(x)
     case_y, y = unpack(y)
 
-    sort = get_sort(x)
-    m,e = sizes(sort)
+    old_sort = get_sort(x)
+    m,e = sizes(old_sort)
 
-    exponent_diff = sort.exponent(x) - sort.exponent(y)
+    exponent_diff = old_sort.exponent(x) - old_sort.exponent(y)
 
-    #Adding 3 additional bits at the end of the mantissas for rounding:
-    mantissa_x, mantissa_y = sort.mantissa(x), sort.mantissa(y)
-    mantissa_x, mantissa_y = ZeroExt(3, mantissa_x), ZeroExt(3, mantissa_y)
-    mantissa_x, mantissa_y = mantissa_x << 3, mantissa_y << 3
+    max_shift = 2**e
+
+    #Adding additional bits at the end of the mantissas for rounding:
+    mantissa_x, mantissa_y = old_sort.mantissa(x), old_sort.mantissa(y)
+    mantissa_x, mantissa_y = ZeroExt(max_shift, mantissa_x), ZeroExt(max_shift, mantissa_y)
+    mantissa_x, mantissa_y = mantissa_x << max_shift, mantissa_y << max_shift
 
     #Shifting the y mantissa to match the exponent of x:
     exponent_diff = ZeroExt(mantissa_y.size() - exponent_diff.size(), exponent_diff)
@@ -319,22 +327,16 @@ def add(a : DatatypeRef, b : DatatypeRef, rounding_mode : DatatypeRef = Truncate
 
     #Overflow stuff:
     overflow = Not(BVAddNoOverflow(mantissa_x, mantissa_y_shifted, False))
-    exponent_result = If(overflow, sort.exponent(x) + 1, sort.exponent(x))
+    exponent_result = If(overflow, old_sort.exponent(x) + 1, old_sort.exponent(x))
 
-    mantissa_y_shifted = If(overflow, LShR(mantissa_y_shifted, 1), mantissa_y_shifted)
-    mantissa_x = If(overflow, LShR(mantissa_x, 1), mantissa_x)
+    mantissa_y_shifted = If(overflow, ZeroExt(1, mantissa_y_shifted), mantissa_y_shifted)
+    mantissa_x = If(overflow, ZeroExt(1, mantissa_x), mantissa_x)
 
-    #Sticky Bit:
-    amount_of_kept_bits = If(UGT(mantissa_y.size() - exponent_diff, 0) , mantissa_y.size() - exponent_diff - If(overflow, 1, 0), 0)
-    infinite_rem = LShR(mantissa_y << amount_of_kept_bits, amount_of_kept_bits) #Get the bits that were shiftet away
-    sticky_bit = If(UGT(infinite_rem, 0), BitVecVal(1,mantissa_y.size()), BitVecVal(0,mantissa_y.size()))
-    
     #Compute mantissa
-    mantissa_result = If(sort.sign(x) + sort.sign(y) == 1, mantissa_x - mantissa_y_shifted, mantissa_x + mantissa_y_shifted)
-    mantissa_result = mantissa_result + sticky_bit #TODO: problem
+    mantissa_result = If(old_sort.sign(x) + old_sort.sign(y) == 1, mantissa_x - mantissa_y_shifted, mantissa_x + mantissa_y_shifted)
     
     #should work due to x having the bigger value:
-    sign_result = sort.sign(x)
+    sign_result = old_sort.sign(x)
 
     new_sort = FloatSort(mantissa_result.size(), e)
     return pack(FloatVar(sign_result, mantissa_result, exponent_result, new_sort), sort, rounding_mode)
@@ -552,7 +554,25 @@ def rem(a : DatatypeRef, b : DatatypeRef) -> DatatypeRef:
 
 
 # Performs the square-root operation on a node a
-def sqrt(a : DatatypeRef, rounding_mode : DatatypeRef = Truncate) -> DatatypeRef: pass
+def sqrt(a : DatatypeRef, rounding_mode : DatatypeRef = Truncate) -> DatatypeRef:
+    sort = get_sort(a)
+    m, e = sizes(sort)
+
+    
+    mantissa_result = 0
+    exponent_result = sort.exponent(a) / 2 #TODO: check if this is true
+    solution = FloatVar(BitVecVal(1,1), mantissa_result, exponent_result, sort)
+
+    #Special cases:
+    solution = If(Or(is_zero(a), is_nan(a)), #this shouldn't be necessary for zero, but could speed up the cases. neg_zero is also specifically pointed out in the standard
+                    a,
+                    If(lt(a, FloatValZero(sort, 1)),
+                        FloatValNaN(sort),
+                        solution
+                    )
+                )
+    
+    return solution
 
 # Performs the operation a + (b * c)
 def fma(a : DatatypeRef, b : DatatypeRef, c : DatatypeRef, rounding_mode : DatatypeRef = Truncate) -> DatatypeRef:
