@@ -452,7 +452,19 @@ class Operations(unittest.TestCase):
         self.assertTrue(x==y)
 
     def test_div(self):
-        pass
+        x, y = FloatConst("x", 10, 5), FloatConst("y", 10, 5)
+        x_z3, y_z3 = Float_to_z3FP(x), Float_to_z3FP(y)
+
+        for rm in (Up, Down, Truncate, NearestTieToEven, NearestTieAwayFromZero):
+            result = validate(
+                Or(
+                    ( Float_to_z3FP(div(x, y, rm)) == fpDiv(rm_to_z3rm(rm), x_z3, y_z3) ),
+                    Or(is_nan(x), is_nan(y)),
+                    Or(is_subnormal(x), is_subnormal(y)),
+                    Or(is_subnormal(z3FP_to_Float(fpDiv(rm_to_z3rm(rm), x_z3, y_z3))))
+                )
+            )
+            self.assertTrue(result)
 
     def test_rem(self):
         pass
