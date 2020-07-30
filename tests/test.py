@@ -467,7 +467,17 @@ class Operations(unittest.TestCase):
             self.assertTrue(result)
 
     def test_rem(self):
-        pass
+        x, y = FloatConst("x", 10, 5), FloatConst("y", 10, 5)
+        x_z3, y_z3 = Float_to_z3FP(x), Float_to_z3FP(y)
+        result = validate(
+            Or(
+                ( Float_to_z3FP(rem(x, y)) == fpRem(x_z3, y_z3) ),
+                Or(is_nan(x), is_nan(y)),
+                Or(is_subnormal(x), is_subnormal(y)),
+                Or(is_subnormal(z3FP_to_Float(fpRem(x_z3, y_z3))))
+            )
+        )
+        self.assertTrue(result)
 
     def test_squrt(self):
         x = FloatConst("x", 23, 8)

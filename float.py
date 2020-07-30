@@ -454,14 +454,12 @@ def div(a : DatatypeRef, b : DatatypeRef, rounding_mode : DatatypeRef = Truncate
     exponent_offset = leading_digits - BitVecVal(1, leading_digits.size())
     exponent, exponent_offset = match_sizes(exponent, exponent_offset)
 
-    # can't check normalization overflow due to access violation :(
-    #normalization_overflow = Not(BVAddNoOverflow(exponent, exponent_offset, True))
+    normalization_overflow = Not(BVAddNoOverflow(exponent, exponent_offset, True))
     exponent = exponent + exponent_offset
 
     result_case = If(result_case != unpacked_normal_case, result_case, 
                   If(underflow, zero_case, 
-                  #If(Or(overflow, normalization_overflow), inf_case, unpacked_normal_case)))
-                  If(overflow, inf_case, unpacked_normal_case)))
+                  If(Or(overflow, normalization_overflow), inf_case, unpacked_normal_case)))
 
     new_sort = FloatSort(mantissa.size(), exponent.size())
     result = pack(FloatVar(sign, mantissa, exponent, new_sort), result_sort, rounding_mode)
@@ -507,7 +505,7 @@ def __int_div(a : DatatypeRef, b : DatatypeRef, result_sort : DatatypeSortRef):
     nat, round_overflow = round(0, nat, remainder, NearestTieToEven)
     internal_overflow = And(Not(round_overflow), nat == (BitVecVal(1, nat.size()) << leading_digits))
     nat = If(round_overflow, BitVecVal(1 << (nat.size() - 1), nat.size()),
-          If(internal_overflow, BitVecVal(1 << (leading_digits - 1), nat.size()), nat))
+          If(internal_overflow, BitVecVal(1, leading_digits.size()) << (leading_digits - 1), nat))
     round_overflow_exp_add = If(Or(round_overflow, internal_overflow), BitVecVal(1, exponent.size()), BitVecVal(0, exponent.size()))
     round_exp_overflow = Not(BVAddNoOverflow(exponent, round_overflow_exp_add, True))
 
