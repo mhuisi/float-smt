@@ -242,30 +242,64 @@ class Operations(unittest.TestCase):
         self.false(eq_float(neg(self.__normal2), self.__normal2))
 
     def test_add(self):
-        self.true(add(self.__pos_zero, self.__pos_zero) == self.__pos_zero) # neutrality
-        self.true(add(self.__neg_zero, self.__neg_zero) == self.__pos_zero) # neutrality
-        self.true(add(self.__pos_zero, self.__neg_zero) == self.__pos_zero) # neutrality
         
-        self.true(add(self.__normal1, self.__neg_zero) == self.__normal1) # Identity
-        self.true(add(self.__normal1, self.__pos_zero) == self.__normal1) # Identity
+        rm = Truncate
+        a = FloatVal(0,7503853,140, FloatSort(23,8))
+        b = FloatVal(0,126166,145, FloatSort(23,8))
+        x = simplify(Float_to_z3FP(add(a, b,rm)))
+        y = simplify(fpAdd(rm_to_z3rm(rm), Float_to_z3FP(a), Float_to_z3FP(b)))
+        print(x)
+        print(y)
+        self.assertTrue(x==y)
 
-        self.true(add(self.__normal1, self.__normal2) == add(self.__normal2, self.__normal1)) # Cummutativity
-        self.true(add(self.__normal1, self.__normal6) == add(self.__normal6, self.__normal1)) # Cummutativity
+        a = FloatVal(0,7503853,70, FloatSort(23,8))
+        b = FloatVal(1,126166,70, FloatSort(23,8))
+        x = simplify(Float_to_z3FP(add(a, b,rm)))
+        y = simplify(fpAdd(rm_to_z3rm(rm), Float_to_z3FP(a), Float_to_z3FP(b)))
+        print(x)
+        print(y)
+        self.assertTrue(x==y)
+
+        a = FloatVal(0,7503853,140, FloatSort(23,8))
+        b = FloatVal(1,126166,70, FloatSort(23,8))
+        x = simplify(Float_to_z3FP(add(a, b,rm)))
+        y = simplify(fpAdd(rm_to_z3rm(rm), Float_to_z3FP(a), Float_to_z3FP(b)))
+        self.assertTrue(x==y)
+
+        
+
+        #-----------------------------------------------------
+
+        a = FloatVal(0,585,21, FloatSort(10,5))
+        b = FloatVal(1,64,21, FloatSort(10,5))
+        x = simplify(Float_to_z3FP(add(a, b,rm)))
+        y = simplify(fpAdd(rm_to_z3rm(rm), Float_to_z3FP(a), Float_to_z3FP(b)))
+        print(x)
+        print(y)
+        self.assertTrue(x==y)
 
 
-        #self.true(
-        #    add(
-        #        add(self._normal1, self.__normal2),
-        #        self._normal3
-        #    )
-        #    ==
-        #    add(
-        #        self._normal1,
-        #        add(self._normal2, self.__normal3)                
-        #    )
-        #)# Associativity is not guaranteed for floating point numbers
+        a = FloatVal(0,32,0, FloatSort(10,5))
+        b = FloatVal(0,5,4, FloatSort(10,5))
+        x = simplify(Float_to_z3FP(add(a, b,rm)))
+        y = simplify(fpAdd(rm_to_z3rm(rm), Float_to_z3FP(a), Float_to_z3FP(b)))
+        print(x)
+        print(y)
+        self.assertTrue(x==y)
 
-        #TODO: add constructed checks with real values
+        x, y = FloatConst("x", 10, 5), FloatConst("y", 10, 5)
+        x_z3, y_z3 = Float_to_z3FP(x), Float_to_z3FP(y)
+
+        for rm in (Truncate, Up, Down, NearestTieToEven, NearestTieAwayFromZero):
+            result = validate(
+                Or(
+                    ( Float_to_z3FP(add(x, y, rm)) == fpAdd(rm_to_z3rm(rm), x_z3, y_z3) ),
+                    Or(is_nan(x), is_nan(y)),
+                )
+            )
+            self.assertTrue(result)
+            print("Rounding mode " + rm + " ok")
+
 
     def test_sub(self):
         pass
@@ -426,8 +460,6 @@ class Operations(unittest.TestCase):
         print(y)
         self.assertTrue(x==y)
 
-
-
         x, y = FloatConst("x", 23, 8), FloatConst("y", 23, 8)
         x_z3, y_z3 = Float_to_z3FP(x), Float_to_z3FP(y)
 
@@ -499,16 +531,16 @@ class Operations(unittest.TestCase):
     def test_pack(self):
 
         case, unpacked = unpack(self.__pos_zero)
-        self.true(eq_bitwise(pack(unpacked, self.__sort, Truncate), self.__pos_zero))
+        self.true(eq_bitwise(pack(unpacked, self.__sort, Truncate, zero_case), self.__pos_zero))
 
         case, unpacked = unpack(self.__neg_zero)
-        self.true(eq_bitwise(pack(unpacked, self.__sort,Truncate), self.__neg_zero))
+        self.true(eq_bitwise(pack(unpacked, self.__sort,Truncate, zero_case), self.__neg_zero))
 
         case, unpacked = unpack(self.__pos_inf)
-        self.true(eq_bitwise(pack(unpacked, self.__sort, Truncate), self.__pos_inf))
+        self.true(eq_bitwise(pack(unpacked, self.__sort, Truncate, inf_case), self.__pos_inf))
 
         case, unpacked = unpack(self.__neg_inf)
-        self.true(eq_bitwise(pack(unpacked, self.__sort, Truncate), self.__neg_inf))
+        self.true(eq_bitwise(pack(unpacked, self.__sort, Truncate, inf_case), self.__neg_inf))
 
         case, unpacked = unpack(self.__normal5)
         self.true(eq_bitwise(pack(unpacked, self.__sort, Truncate), self.__normal5))
@@ -517,7 +549,7 @@ class Operations(unittest.TestCase):
         self.true(eq_bitwise(pack(unpacked, self.__sort, Truncate), self.__normal6))
 
         case, unpacked = unpack(self.__nan1)
-        self.true(eq_bitwise(pack(unpacked, self.__sort, Truncate), self.__nan1))
+        self.true(eq_bitwise(pack(unpacked, self.__sort, Truncate, nan_case), self.__nan1))
 
         case, unpacked = unpack(self.__normal1)
         self.true(eq_bitwise(pack(unpacked, self.__sort, Truncate), self.__normal1))
@@ -539,6 +571,13 @@ class Operations(unittest.TestCase):
 
         case, unpacked = unpack(self.__subnormal2)
         self.true(eq_bitwise(pack(unpacked, self.__sort, Truncate), self.__subnormal2))
+
+
+        x = FloatVal(0,0,0, FloatSort(5, 5))
+        case, unpacked = unpack(x)
+        result = validate(eq_bitwise(pack(unpacked, FloatSort(5, 5), Truncate), x))
+        self.assertTrue(result)
+        
 
         x = FloatConst("x", 5, 5)
         case, unpacked = unpack(x)
