@@ -4,8 +4,8 @@ from z3 import *
 def clz(v: BitVecRef) -> IntNumRef:
     #TODO: think about substituting this with a binary search instead of linear search
     s = v.size()
-    zero = BitVecVal(0, s.bit_length())
-    one = BitVecVal(1, s.bit_length())
+    zero = BitVecVal(0, s)
+    one = BitVecVal(1, s)
     d = zero
     # count leading zeros by shifting bits away to the right
     # until the result of shifting itself is zero.
