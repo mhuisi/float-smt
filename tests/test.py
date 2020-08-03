@@ -248,16 +248,16 @@ class Operations(unittest.TestCase):
         b = FloatVal(0,126166,145, FloatSort(23,8))
         x = simplify(Float_to_z3FP(add(a, b,rm)))
         y = simplify(fpAdd(rm_to_z3rm(rm), Float_to_z3FP(a), Float_to_z3FP(b)))
-        print(x)
-        print(y)
+        #print(x)
+        #print(y)
         self.assertTrue(x==y)
 
         a = FloatVal(0,7503853,70, FloatSort(23,8))
         b = FloatVal(1,126166,70, FloatSort(23,8))
         x = simplify(Float_to_z3FP(add(a, b,rm)))
         y = simplify(fpAdd(rm_to_z3rm(rm), Float_to_z3FP(a), Float_to_z3FP(b)))
-        print(x)
-        print(y)
+        #print(x)
+        #print(y)
         self.assertTrue(x==y)
 
         a = FloatVal(0,7503853,140, FloatSort(23,8))
@@ -274,6 +274,23 @@ class Operations(unittest.TestCase):
         b = FloatVal(1,64,21, FloatSort(10,5))
         x = simplify(Float_to_z3FP(add(a, b,rm)))
         y = simplify(fpAdd(rm_to_z3rm(rm), Float_to_z3FP(a), Float_to_z3FP(b)))
+        #print(x)
+        #print(y)
+        self.assertTrue(x==y)
+
+
+        a = FloatVal(0,1023,21, FloatSort(10,5))
+        b = FloatVal(0,1023,21, FloatSort(10,5))
+        x = simplify(Float_to_z3FP(add(a, b,rm)))
+        y = simplify(fpAdd(rm_to_z3rm(rm), Float_to_z3FP(a), Float_to_z3FP(b)))
+        print(x)
+        print(y)
+        self.assertTrue(x==y)
+
+        a = FloatVal(1,1,0, FloatSort(10,5))
+        b = FloatVal(0,0,31, FloatSort(10,5))
+        x = simplify(Float_to_z3FP(add(a, b,rm)))
+        y = simplify(fpAdd(rm_to_z3rm(rm), Float_to_z3FP(a), Float_to_z3FP(b)))
         print(x)
         print(y)
         self.assertTrue(x==y)
@@ -283,11 +300,11 @@ class Operations(unittest.TestCase):
         b = FloatVal(0,5,4, FloatSort(10,5))
         x = simplify(Float_to_z3FP(add(a, b,rm)))
         y = simplify(fpAdd(rm_to_z3rm(rm), Float_to_z3FP(a), Float_to_z3FP(b)))
-        print(x)
-        print(y)
+        #print(x)
+        #print(y)
         self.assertTrue(x==y)
 
-        '''
+        
         x, y = FloatConst("x", 10, 5), FloatConst("y", 10, 5)
         x_z3, y_z3 = Float_to_z3FP(x), Float_to_z3FP(y)
 
@@ -300,7 +317,6 @@ class Operations(unittest.TestCase):
             )
             self.assertTrue(result)
             print("Rounding mode " + rm + " ok")
-        '''
 
     def test_sub(self):
         pass
