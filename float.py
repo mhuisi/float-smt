@@ -322,17 +322,10 @@ def pack(f : DatatypeRef, sort : DatatypeSortRef, rounding_mode : DatatypeRef = 
 
     return FloatVar(sign, mantissa, exponent, sort)
 
-# Adds the floating point values a & b
-def add(a : DatatypeRef, b : DatatypeRef, rounding_mode : DatatypeRef = Truncate) -> DatatypeRef:
-    ensure_eq_sort(a, b)
-    
-    #Unpack the floats and put the (absolute) bigger one into x:
-    sort = get_sort(a)
-    x = If(gt(abs(a), abs(b)), a, b)
-    y = If(gt(abs(a), abs(b)), b, a)
-    case_x, x = unpack(x)
-    case_y, y = unpack(y)
 
+
+
+def __add_core(x, y):
     old_sort = get_sort(x)
     m,e = sizes(old_sort)
 
@@ -349,13 +342,7 @@ def add(a : DatatypeRef, b : DatatypeRef, rounding_mode : DatatypeRef = Truncate
     exponent_diff = ZeroExt(mantissa_y.size() - exponent_diff.size(), exponent_diff)
     mantissa_y_shifted = LShR(mantissa_y, exponent_diff)
 
-
-    #Overflow stuff:
-    overflow = Not(BVAddNoOverflow(mantissa_x, mantissa_y_shifted, False))
-    exponent_result = If(overflow, old_sort.exponent(x) + 1, old_sort.exponent(x))
-
-    mantissa_y_shifted = If(overflow, ZeroExt(1, mantissa_y_shifted), mantissa_y_shifted)
-    mantissa_x = If(overflow, ZeroExt(1, mantissa_x), mantissa_x)
+    exponent_result = old_sort.exponent(x)
 
     #Compute mantissa
     mantissa_result = If(old_sort.sign(x) + old_sort.sign(y) == 1, mantissa_x - mantissa_y_shifted, mantissa_x + mantissa_y_shifted)
@@ -364,6 +351,24 @@ def add(a : DatatypeRef, b : DatatypeRef, rounding_mode : DatatypeRef = Truncate
     sign_result = old_sort.sign(x)
 
     new_sort = FloatSort(mantissa_result.size(), e)
+
+    return sign_result, mantissa_result, exponent_result, new_sort
+
+
+
+# Adds the floating point values a & b
+def add(a : DatatypeRef, b : DatatypeRef, rounding_mode : DatatypeRef = Truncate) -> DatatypeRef:
+    ensure_eq_sort(a, b)
+    
+    #Unpack the floats and put the (absolute) bigger one into x:
+    sort = get_sort(a)
+    x = If(gt(abs(a), abs(b)), a, b)
+    y = If(gt(abs(a), abs(b)), b, a)
+    case_x, x = unpack(x)
+    case_y, y = unpack(y)
+
+    sign_result, mantissa_result, exponent_result, new_sort = __add_core(x, y)
+
     return pack(FloatVar(sign_result, mantissa_result, exponent_result, new_sort), sort, rounding_mode)
 
 # Subtracts b from a
