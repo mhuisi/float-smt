@@ -415,8 +415,8 @@ def add(a : DatatypeRef, b : DatatypeRef, rounding_mode : DatatypeRef = Truncate
     sign_result = If(
         neg(a) == b, #check if result is zero
         If(
-            is_zero(a),#both are zero
-            sign_result,
+            And(is_zero(a), a==b),#both are zero and equal
+            sort.sign(a),
             If(
                 rounding_mode == Down,
                 BitVecVal(1, 1),#negative

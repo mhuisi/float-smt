@@ -321,7 +321,14 @@ class Operations(unittest.TestCase):
         #print(y)
         self.assertTrue(x==y)
 
-        
+        a = FloatVal(0,0,0, FloatSort(10,5))
+        b = FloatVal(1,0,0, FloatSort(10,5))
+        x = simplify(Float_to_z3FP(add(a, b,rm)))
+        y = simplify(fpAdd(rm_to_z3rm(rm), Float_to_z3FP(a), Float_to_z3FP(b)))
+        #print(x)
+        #print(y)
+        self.assertTrue(x==y)
+
         '''
         z3 messes up this example:
         rm = Truncate
