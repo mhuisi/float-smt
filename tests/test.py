@@ -353,7 +353,7 @@ class Operations(unittest.TestCase):
                 )
             )
             self.assertTrue(result)
-            print("Rounding mode " + rm + " ok")
+            print("Rounding mode " + str(rm) + " ok")
 
     def test_sub(self):
         pass
