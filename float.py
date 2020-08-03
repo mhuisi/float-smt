@@ -198,6 +198,15 @@ def match_sizes(xs):
             max_size = x.size()
     return [SignExt(max_size - x.size(), x) if signed else ZeroExt(max_size - x.size(), x) for x, signed in xs]
 
+# function which ensures that value + added cannot overflow
+def guarantee_space(value, added, signed, offset=0):
+    n = value.size()-1 if signed else value.size()
+    # in order for value + added to not overflow, we need
+    # 2**(n + k) - 2**n > added <=> 2**n*(2**k - 1) > added <=> k > log2(added/2**n + 1)
+    added_bits = floor(log2(added/2**n + 1)) + 1 + offset
+    value = SignExt(added_bits, value) if signed else ZeroExt(added_bit, value)
+    return value
+
 # debug function to print bit repr of z3 bitvectors
 def val(x):
     return ("{:0%db}" % x.size()).format(int(str(simplify(x))))
@@ -509,17 +518,7 @@ def div(a : DatatypeRef, b : DatatypeRef, rounding_mode : DatatypeRef = Truncate
 
     sign, mantissa, exponent = __div_core(a, b)
 
-    # in order to adjust the exponent for the new leading digits,
-    # 2**(e-1 + k) - 2**(e-1) > m + 1 needs to be true for some k,
-    # i.e. we need to gain enough space in a signed integer (hence e-1)
-    # to be able to add m + 1 (leading digits = m, + 1 to be able to round in pack).
-    # this condition is equivalent to k > log2((m + 1)/2**(e-1) + 1).
-    # note that unpack already accounts for some of this, but adding
-    # more precision than necessary doesn't hurt.
-    additional_exp_precision = floor(log2((m + 1)/2**(e-1) + 1)) + 1 - e
-    additional_exp_precision = 0 if additional_exp_precision < 0 else additional_exp_precision
-    exponent = SignExt(additional_exp_precision, exponent)
-
+    exponent = guarantee_space(exponent, m-1, True)
     exponent = exponent + BitVecVal(m-1, exponent.size())
 
     new_sort = FloatSort(mantissa.size(), exponent.size())
@@ -538,18 +537,26 @@ def __int_div(a : DatatypeRef, b : DatatypeRef, result_sort : DatatypeSortRef):
     # without reaching a negative exponent (for e = 0 we have exactly the exponent we want).
     # then, we extract the leading digits for the natural number and the remainder, and round the natural number
     # using the remainder. then, we use pack to normalize the result.
-    sign, float_leading_digits, mantissa, exponent, div_underflow, div_overflow = __div_core(a, b)
+    sign, mantissa, exponent = __div_core(a, b)
 
-    mantissa, exponent, float_leading_digits = match_sizes([(mantissa, False), (exponent, True), (float_leading_digits, False)])
+    mantissa, exponent = match_sizes([(mantissa, False), (exponent, True)])
+    # this is kind of tricky: we want exponent + m to not overflow.
+    # if we increase exponent, we need to increase m too (due to match_sizes), hence there's a recursion.
+    # but it turns out that if k bits are enough for exponent + m to not overflow,
+    # k + 1 bits are enough for exponent + m + k to not overflow!
+    # after calling guarantee_space, we have that m <= 2**(e+k)-2**e.
+    # additionally one can see that k <= 2**(e+k)-2**e = 2**e*(2**k-1).
+    # it follows that m+k <= 2**(e+1+k)-2**(e+1) = 2*(2**(e+k)-2**e).
+    exponent = guarantee_space(exponent, mantissa.size(), True, 1)
+    mantissa, exponent = match_sizes([(mantissa, False), (exponent, True)])
 
     m, e = mantissa.size(), exponent.size()
 
-    m_bv = BitVecVal(m, e)
-    float_remainder_digits = m_bv - float_leading_digits
+    float_remainder_digits = BitVecVal(m - r_m, e)
     extra_leading_digits = If(float_remainder_digits < exponent, float_remainder_digits, exponent)
-    # note that this value may be negative
-    leading_digits = float_leading_digits + extra_leading_digits
-    remainder_digits = m_bv - leading_digits
+    # note that this value may be negative.
+    leading_digits = BitVecVal(r_m, e) + extra_leading_digits
+    remainder_digits = BitVecVal(m, e) - leading_digits
 
     nat = LShR(mantissa, remainder_digits)
     remainder = If(leading_digits < 0, LShR(mantissa, -leading_digits), mantissa << leading_digits)
@@ -558,23 +565,17 @@ def __int_div(a : DatatypeRef, b : DatatypeRef, result_sort : DatatypeSortRef):
     internal_overflow = And(Not(round_overflow), nat == (BitVecVal(1, nat.size()) << leading_digits))
     nat = If(round_overflow, BitVecVal(1 << (nat.size() - 1), nat.size()),
           If(internal_overflow, BitVecVal(1, leading_digits.size()) << (leading_digits - 1), nat))
-    round_overflow_exp_add = If(Or(round_overflow, internal_overflow), BitVecVal(1, exponent.size()), BitVecVal(0, exponent.size()))
-    round_exp_overflow = Not(BVAddNoOverflow(exponent, round_overflow_exp_add, True))
+    exponent = exponent + If(Or(round_overflow, internal_overflow), 
+                             BitVecVal(1, exponent.size()), 
+                             BitVecVal(0, exponent.size()))
 
     # this is why we need the internal overflow check: if the nat is suddenly longer than leading_digits,
     # we'd lose the leading 1.
     nat = nat << remainder_digits
-    normalization_overflow = Not(BVAddNoOverflow(exponent, float_leading_digits - 1, True))
-    exponent = exponent + float_leading_digits - 1
+    exponent = exponent + r_m - 1
 
-    zero = FloatVar(sign, BitVecVal(0, r_m), BitVecVal(0, r_e), result_sort)
-    inf = FloatVar(sign, BitVecVal(0, r_m), BitVecVal(2**r_e - 1, r_e), result_sort)
     # no rounding occurs here since we nullified the remainder.
-    # no normalization occurs here either.
-    # the only purpose of this call is to retrieve a float with sort result_sort.
     nat = pack(FloatVar(sign, nat, exponent, FloatSort(m, e)), result_sort, RoundNearestTiesToEven)
-    nat = If(div_underflow, zero, 
-          If(Or(div_overflow, normalization_overflow, round_exp_overflow), inf, nat))
 
     return nat
 
