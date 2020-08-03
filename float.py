@@ -342,7 +342,13 @@ def __add_core(x, y):
     exponent_diff = ZeroExt(mantissa_y.size() - exponent_diff.size(), exponent_diff)
     mantissa_y_shifted = LShR(mantissa_y, exponent_diff)
 
-    exponent_result = old_sort.exponent(x)
+
+    #Overflow stuff:
+    overflow = Not(BVAddNoOverflow(mantissa_x, mantissa_y_shifted, False))
+    exponent_result = If(overflow, old_sort.exponent(x) + 1, old_sort.exponent(x))
+
+    mantissa_y_shifted = If(overflow, LShR(mantissa_y_shifted, 1), mantissa_y_shifted)
+    mantissa_x = If(overflow, LShR(mantissa_x, 1), mantissa_x)
 
     #Compute mantissa
     mantissa_result = If(old_sort.sign(x) + old_sort.sign(y) == 1, mantissa_x - mantissa_y_shifted, mantissa_x + mantissa_y_shifted)
@@ -367,9 +373,36 @@ def add(a : DatatypeRef, b : DatatypeRef, rounding_mode : DatatypeRef = Truncate
     case_x, x = unpack(x)
     case_y, y = unpack(y)
 
+    result_case = If(
+        Or(
+            case_x == nan_case, 
+            case_y == nan_case,
+        ),
+        nan_case,
+        If(
+            And(
+                case_x == inf_case, 
+                case_y == inf_case
+            ),
+            If(
+                sort.sign(a) != sort.sign(b),
+                nan_case, #pos_inf + neg_inf
+                inf_case
+            ),
+            If(
+                Or(
+                    case_x == inf_case, 
+                    case_y == inf_case
+                ), 
+                inf_case,
+                unpacked_normal_case
+            )
+        )
+    )
+    
     sign_result, mantissa_result, exponent_result, new_sort = __add_core(x, y)
 
-    return pack(FloatVar(sign_result, mantissa_result, exponent_result, new_sort), sort, rounding_mode)
+    return pack(FloatVar(sign_result, mantissa_result, exponent_result, new_sort), sort, rounding_mode, result_case)
 
 # Subtracts b from a
 def sub(a : DatatypeRef, b : DatatypeRef, rounding_mode : DatatypeRef = Truncate) -> DatatypeRef:
