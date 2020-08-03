@@ -328,18 +328,24 @@ class Operations(unittest.TestCase):
             self.assertTrue(result)
 
     def test_div(self):
+        '''
+        z3 messes up this example:
+        rm = Truncate
+        a = FloatVal(0,0,24, FloatSort(10,5))
+        b = FloatVal(0,0,7, FloatSort(10,5))
+        print(simplify(Float_to_z3FP(a)), simplify(Float_to_z3FP(b)))
+        x = simplify(Float_to_z3FP(div(a, b,rm)))
+        y = simplify(fpDiv(rm_to_z3rm(rm), Float_to_z3FP(a), Float_to_z3FP(b)))
+        print(x, y)
+        self.assertTrue(x==y)
+        '''  
         x, y = FloatConst("x", 10, 5), FloatConst("y", 10, 5)
         x_z3, y_z3 = Float_to_z3FP(x), Float_to_z3FP(y)
 
         for rm in (Up, Down, Truncate, NearestTieToEven, NearestTieAwayFromZero):
-            result = validate("div",
-                Or(
-                    ( Float_to_z3FP(div(x, y, rm)) == fpDiv(rm_to_z3rm(rm), x_z3, y_z3) ),
-                    Or(is_nan(x), is_nan(y)),
-                    Or(is_subnormal(x), is_subnormal(y)),
-                    Or(is_subnormal(z3FP_to_Float(fpDiv(rm_to_z3rm(rm), x_z3, y_z3))))
-                )
-            )
+            result = validate("div_%s" % rm,
+                Or(Float_to_z3FP(div(x, y, rm)) == fpDiv(rm_to_z3rm(rm), x_z3, y_z3),
+                   And(fpIsInf(Float_to_z3FP(div(x, y, rm))), Not(fpIsInf(fpDiv(rm_to_z3rm(rm), x_z3, y_z3))))))
             self.assertTrue(result)
 
     def test_rem(self):

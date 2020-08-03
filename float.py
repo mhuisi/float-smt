@@ -2,6 +2,7 @@ from z3 import *
 from typing import List
 import converter
 import utils.utils as utils
+from math import log2, floor
 
 RoundingMode, (NearestTieToEven, NearestTieAwayFromZero, Up, Down, Truncate) = EnumSort("RoundingMode", [
     "NearestTieToEven", 
@@ -190,6 +191,17 @@ def neg(a : DatatypeRef) -> DatatypeRef:
     sign = If(s.sign(a) == 1, BitVecVal(0, 1), BitVecVal(1, 1))
     return FloatVar(sign, s.mantissa(a), s.exponent(a), s)
 
+def match_sizes(xs):
+    max_size = -1
+    for x, _ in xs:
+        if x.size() > max_size:
+            max_size = x.size()
+    return [SignExt(max_size - x.size(), x) if signed else ZeroExt(max_size - x.size(), x) for x, signed in xs]
+
+# debug function to print bit repr of z3 bitvectors
+def val(x):
+    return ("{:0%db}" % x.size()).format(int(str(simplify(x))))
+
 # should be cheaper to keep track of the unpacked state with this flag
 FloatCase, (unpacked_normal_case, zero_case, inf_case, nan_case) = EnumSort('FloatCase', ['unpacked_normal', 'zero', 'inf', 'nan'])
 
@@ -203,12 +215,12 @@ FloatCase, (unpacked_normal_case, zero_case, inf_case, nan_case) = EnumSort('Flo
 def unpack(f : DatatypeRef) -> (DatatypeRef, DatatypeRef):
     s = get_sort(f)
     m, e = sizes(s)
-    new_sort = FloatSort(m+1, e+1)
+    new_sort = FloatSort(m+1, e+2)
     sign = s.sign(f)
     mantissa = s.mantissa(f)
-    # one extra bit should be sufficient to never run into overflows before pack().
-    # (is probably not true for division, i'll have to think about how much more precision we need)
-    exponent = ZeroExt(1, s.exponent(f))
+    # two extra bits should be sufficient to never run into overflows in pack().
+    # operations may need to expand the exponent further.
+    exponent = ZeroExt(2, s.exponent(f))
     exponent = exponent - BitVecVal(2**(e-1) - 1, exponent.size())
     case = If(is_nan(f), nan_case, 
            If(is_inf(f), inf_case, 
@@ -252,9 +264,6 @@ def round(sign : DatatypeRef, val : DatatypeRef, remainder : DatatypeRef, roundi
     val = val + round_addition
     return val, overflow
 
-def val(x):
-    return ("{:0%db}" % x.size()).format(int(str(simplify(x))))
-
 def pack(f : DatatypeRef, sort : DatatypeSortRef, rounding_mode : DatatypeRef = Truncate, case : DatatypeRef = unpacked_normal_case) -> DatatypeRef:
     # the mantissa of f is of the form 0...01x...xy...y, where 1x...x are the first m bits of the mantissa (m is the mantissa size in sort),
     # and y...y is the remainder.
@@ -267,9 +276,8 @@ def pack(f : DatatypeRef, sort : DatatypeSortRef, rounding_mode : DatatypeRef = 
     mantissa = s.mantissa(f)
     # add bias
     exponent = s.exponent(f) + BitVecVal(2**(e-1) - 1, e_old)
-
     leading_zeros = utils.clz(mantissa)
-    mantissa, exponent, leading_zeros = match_sizes([mantissa, exponent, leading_zeros])
+    mantissa, exponent, leading_zeros = match_sizes([(mantissa, False), (exponent, True), (leading_zeros, False)])
 
     added_leading_zeros = -exponent + 1
     added_leading_zeros = If(added_leading_zeros > 0, added_leading_zeros, 0)
@@ -367,9 +375,6 @@ def mul(a : DatatypeRef, b : DatatypeRef, rounding_mode : DatatypeRef = Truncate
     ensure_eq_sort(a, b)
     result_sort = get_sort(a)
 
-    old_s = get_sort(a)
-    old_m, old_e = sizes(old_s)
-
     case_a, a = unpack(a)
     case_b, b = unpack(b)
 
@@ -402,39 +407,31 @@ def mul(a : DatatypeRef, b : DatatypeRef, rounding_mode : DatatypeRef = Truncate
 def __div_core(a : DatatypeRef, b : DatatypeRef):
     s = get_sort(a)
     m, e = sizes(s)
-
     # the division of the mantissas is badly behaved wrt rounding.
     # dividing two large mantissas 1xx...x and 1xx...x may yield a very small
     # result mantissa (e.g. 1 if they are equal). in the worst case, to normalize
-    # the number, we need to shift the result mantissa the full m bits.
-    # hence, when rounding, we need at least m additional bits for the normalization
+    # the number, we need to shift the result mantissa a full 2m bits.
+    # hence, when rounding, we need at least 2m additional bits for the normalization
     # alone, and then one additional guard- and sticky bit for rounding.
-    # we gain this additional precision by extending the numerator by m+1 bits (bits to shift + guard bit)
+    # we gain this additional precision by extending the numerator by 2m+1 bits (bits to shift + guard bit)
     # and then calculate the sticky bit using the remainder of the division.
-    a_mantissa = Concat(s.mantissa(a), BitVecVal(0, m+1))
-    b_mantissa = ZeroExt(m+1, s.mantissa(b))
+    a_mantissa = Concat(s.mantissa(a), BitVecVal(0, 2*m+1))
+    b_mantissa = ZeroExt(2*m+1, s.mantissa(b))
 
     # yields a number where the most significant m bits are the quotient
     # and the rest are the remainder (bits for normalization & guard bit)
     padded_quotient = UDiv(a_mantissa, b_mantissa)
     # used to calculate the sticky bit
-    padded_remainder = URem(s.mantissa(a), s.mantissa(b))
+    padded_remainder = URem(a_mantissa, b_mantissa)
 
-    quotient = Extract(padded_quotient.size()-1, m+1, padded_quotient)
-    remainder = Extract(m, 0, padded_quotient)
+    quotient = Extract(padded_quotient.size()-1, 2*m+1, padded_quotient)
+    remainder = Extract(2*m, 0, padded_quotient)
     sticky_bit = If(padded_remainder == 0, BitVecVal(0, 1), BitVecVal(1, 1))
-    remainder = Concat(remainder, sticky_bit)
     mantissa_result = Concat(quotient, remainder, sticky_bit)
-
-    underflow = Not(BVSubNoUnderflow(s.exponent(a), s.exponent(b), True))
-    overflow = Not(BVSubNoOverflow(s.exponent(a), s.exponent(b)))
     exponent_result = s.exponent(a) - s.exponent(b)
-    
-    leading_digits = utils.clz(s.mantissa(b)) - utils.clz(s.mantissa(a))
-    leading_digits = If(leading_digits < 1, BitVecVal(1, leading_digits.size()), leading_digits)
 
     result_sign = s.sign(a) ^ s.sign(b)
-    return (result_sign, leading_digits, mantissa_result, exponent_result, underflow, overflow)
+    return (result_sign, mantissa_result, exponent_result)
 
 # Divides a by b
 def div(a : DatatypeRef, b : DatatypeRef, rounding_mode : DatatypeRef = Truncate) -> DatatypeRef:
@@ -443,6 +440,7 @@ def div(a : DatatypeRef, b : DatatypeRef, rounding_mode : DatatypeRef = Truncate
 
     case_a, a = unpack(a)
     case_b, b = unpack(b)
+    m, e = sizes(get_sort(a))
 
     result_case = If(Or(case_a == nan_case, 
                         case_b == nan_case, 
@@ -455,28 +453,25 @@ def div(a : DatatypeRef, b : DatatypeRef, rounding_mode : DatatypeRef = Truncate
                      zero_case,
                      unpacked_normal_case)))
 
-    sign, leading_digits, mantissa, exponent, underflow, overflow = __div_core(a, b)
+    sign, mantissa, exponent = __div_core(a, b)
 
-    exponent_offset = leading_digits - BitVecVal(1, leading_digits.size())
-    exponent, exponent_offset = match_sizes([exponent, exponent_offset])
+    # in order to adjust the exponent for the new leading digits,
+    # 2**(e-1 + k) - 2**(e-1) > m + 1 needs to be true for some k,
+    # i.e. we need to gain enough space in a signed integer (hence e-1)
+    # to be able to add m + 1 (leading digits = m, + 1 to be able to round in pack).
+    # this condition is equivalent to k > log2((m + 1)/2**(e-1) + 1).
+    # note that unpack already accounts for some of this, but adding
+    # more precision than necessary doesn't hurt.
+    additional_exp_precision = floor(log2((m + 1)/2**(e-1) + 1)) + 1 - e
+    additional_exp_precision = 0 if additional_exp_precision < 0 else additional_exp_precision
+    exponent = SignExt(additional_exp_precision, exponent)
 
-    normalization_overflow = Not(BVAddNoOverflow(exponent, exponent_offset, True))
-    exponent = exponent + exponent_offset
-
-    result_case = If(result_case != unpacked_normal_case, result_case, 
-                  If(underflow, zero_case, 
-                  If(Or(overflow, normalization_overflow), inf_case, unpacked_normal_case)))
+    exponent = exponent + BitVecVal(m-1, exponent.size())
 
     new_sort = FloatSort(mantissa.size(), exponent.size())
-    result = pack(FloatVar(sign, mantissa, exponent, new_sort), result_sort, rounding_mode)
-    return result
 
-def match_sizes(xs : List[BitVecRef]) -> List[BitVecRef]:
-    max_size = -1
-    for x in xs:
-        if x.size() > max_size:
-            max_size = x.size()
-    return [ZeroExt(max_size - x.size(), x) for x in xs]
+    result = pack(FloatVar(sign, mantissa, exponent, new_sort), result_sort, rounding_mode, result_case)
+    return result
 
 def __int_div(a : DatatypeRef, b : DatatypeRef, result_sort : DatatypeSortRef):
     r_m, r_e = sizes(result_sort)
@@ -491,7 +486,7 @@ def __int_div(a : DatatypeRef, b : DatatypeRef, result_sort : DatatypeSortRef):
     # using the remainder. then, we use pack to normalize the result.
     sign, float_leading_digits, mantissa, exponent, div_underflow, div_overflow = __div_core(a, b)
 
-    mantissa, exponent, float_leading_digits = match_sizes([mantissa, exponent, float_leading_digits])
+    mantissa, exponent, float_leading_digits = match_sizes([(mantissa, False), (exponent, True), (float_leading_digits, False)])
 
     m, e = mantissa.size(), exponent.size()
 
