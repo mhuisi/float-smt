@@ -423,7 +423,18 @@ class Operations(unittest.TestCase):
             self.assertTrue(result)
 
     def test_fma(self):
-        pass
+        x, y, z = FloatConst("x", 10, 5), FloatConst("y", 10, 5), FloatConst("z", 10, 5)
+        x_z3, y_z3, z_z3 = Float_to_z3FP(x), Float_to_z3FP(y), Float_to_z3FP(z)
+
+        for rm in (Truncate, Up, Down, NearestTieToEven, NearestTieAwayFromZero):
+            result = validate("fma",
+                Or(
+                    ( Float_to_z3FP(fma(x, y, z, rm)) == fpFMA(rm_to_z3rm(rm), x_z3, y_z3, z_z3) ),
+                    False #And(fpIsInf(Float_to_z3FP(add(x, y, rm))), Not(fpIsInf(fpAdd(rm_to_z3rm(rm), x_z3, y_z3)))),
+                )
+            )
+            self.assertTrue(result)
+            print("Rounding mode " + str(rm) + " ok")
     
     def test_min(self):
         pass
@@ -485,7 +496,7 @@ class Operations(unittest.TestCase):
 def validate(s, statement):
     solver = Solver()
     solver.add(Not(statement))
-    print("starting validation of %s" % s)
+    print("\nstarting validation of %s" % s)
     result = solver.check()
     if(result == sat):
         print(solver.model())
