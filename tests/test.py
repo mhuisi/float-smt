@@ -334,6 +334,13 @@ class Operations(unittest.TestCase):
         self.assertTrue(x==y)
         '''
 
+        rm = Truncate
+        a = FloatVal(0,136,2, FloatSort(10,5))
+        b = FloatVal(0,1009,1, FloatSort(10,5))
+        x = simplify(Float_to_z3FP(mul(a, b,rm)))
+        y = simplify(fpMul(rm_to_z3rm(rm), Float_to_z3FP(a), Float_to_z3FP(b)))
+        self.assertTrue(x==y)
+
         x, y = FloatConst("x", 10, 5), FloatConst("y", 10, 5)
         x_z3, y_z3 = Float_to_z3FP(x), Float_to_z3FP(y)
 

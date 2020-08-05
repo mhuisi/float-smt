@@ -285,8 +285,7 @@ def pack(f : DatatypeRef, sort : DatatypeSortRef, rounding_mode : DatatypeRef = 
     mantissa = s.mantissa(f)
     # add bias
     exponent = s.exponent(f) + BitVecVal(2**(e-1) - 1, e_old)
-    leading_zeros = utils.clz(mantissa)
-    mantissa, exponent, leading_zeros = match_sizes([(mantissa, False), (exponent, True), (leading_zeros, False)])
+    mantissa, exponent = match_sizes([(mantissa, False), (exponent, True)])
 
     added_leading_zeros = -exponent + 1
     added_leading_zeros = If(added_leading_zeros > 0, added_leading_zeros, 0)
@@ -298,6 +297,7 @@ def pack(f : DatatypeRef, sort : DatatypeSortRef, rounding_mode : DatatypeRef = 
     mantissa = mantissa | sticky_bit
     exponent = exponent + added_leading_zeros
 
+    leading_zeros = utils.clz(mantissa)
     normal_pre_rounding = UGT(exponent, leading_zeros)
     # the 0 exponent is only used for signalling.
     # the real exponent is 1 => we can only remove exponent-1 many zeros
@@ -448,6 +448,7 @@ def mul(a : DatatypeRef, b : DatatypeRef, rounding_mode : DatatypeRef = Truncate
 
     result_sign = s.sign(a) ^ s.sign(b)
     new_sort = FloatSort(mantissa_result.size(), exponent_result.size())
+
     result = pack(FloatVar(result_sign, mantissa_result, exponent_result, new_sort), result_sort, rounding_mode, result_case)
     return result
 
