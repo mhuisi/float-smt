@@ -370,6 +370,16 @@ class Operations(unittest.TestCase):
         print(y)
         self.assertTrue(x==y)
         '''
+        rm = Truncate
+        a = FloatVal(0,136,2, FloatSort(10,5))
+        b = FloatVal(0,1009,1, FloatSort(10,5))
+        x = simplify(Float_to_z3FP(mul(a, b,rm)))
+        y = simplify(fpMul(rm_to_z3rm(rm), Float_to_z3FP(a), Float_to_z3FP(b)))
+        print(x)
+        print(y)
+        self.assertTrue(x==y)
+
+
 
         rm = Truncate
         a = FloatVal(0,136,2, FloatSort(10,5))
@@ -430,13 +440,33 @@ class Operations(unittest.TestCase):
             self.assertTrue(result)
 
     def test_fma(self):
+        rm = Truncate
+        a = FloatVal(0, 0, 1, FloatSort(10,5))
+        b = FloatVal(1, 512, 0, FloatSort(10,5))
+        c = FloatVal(0, 86, 1, FloatSort(10,5))
+        x = simplify(Float_to_z3FP(fma(a, b, c, rm)))
+        y = simplify(fpFMA(rm_to_z3rm(rm), Float_to_z3FP(b), Float_to_z3FP(c), Float_to_z3FP(a)))
+        print(x)
+        print(y)
+        self.assertTrue(x==y)
+
+
+        a = FloatVal(0, 424, 10, FloatSort(10,5))
+        b = FloatVal(0, 900, 16, FloatSort(10,5))
+        c = FloatVal(0, 16, 11, FloatSort(10,5))
+        x = simplify(Float_to_z3FP(fma(a, b, c, rm)))
+        y = simplify(fpFMA(rm_to_z3rm(rm), Float_to_z3FP(b), Float_to_z3FP(c), Float_to_z3FP(a)))
+        print(x)
+        print(y)
+        self.assertTrue(x==y)
+        
         x, y, z = FloatConst("x", 10, 5), FloatConst("y", 10, 5), FloatConst("z", 10, 5)
         x_z3, y_z3, z_z3 = Float_to_z3FP(x), Float_to_z3FP(y), Float_to_z3FP(z)
 
         for rm in (Truncate, Up, Down, NearestTieToEven, NearestTieAwayFromZero):
             result = validate("fma",
                 Or(
-                    ( Float_to_z3FP(fma(x, y, z, rm)) == fpFMA(rm_to_z3rm(rm), x_z3, y_z3, z_z3) ),
+                    ( Float_to_z3FP(fma(x, y, z, rm)) == fpFMA(rm_to_z3rm(rm), y_z3, z_z3, x_z3) ),
                     False #And(fpIsInf(Float_to_z3FP(add(x, y, rm))), Not(fpIsInf(fpAdd(rm_to_z3rm(rm), x_z3, y_z3)))),
                 )
             )
