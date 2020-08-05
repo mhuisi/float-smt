@@ -339,7 +339,7 @@ def pack(f : DatatypeRef, sort : DatatypeSortRef, rounding_mode : DatatypeRef = 
 
 
 
-def __add_core(x, y):
+def __add_core(x: DatatypeRef, y: DatatypeRef):
     old_sort = get_sort(x)
     m,e = sizes(old_sort)
 
@@ -438,6 +438,20 @@ def add(a : DatatypeRef, b : DatatypeRef, rounding_mode : DatatypeRef = Truncate
 def sub(a : DatatypeRef, b : DatatypeRef, rounding_mode : DatatypeRef = Truncate) -> DatatypeRef:
     return add(a, neg(b))
 
+
+def __mul_core(a: DatatypeRef, b: DatatypeRef):
+    s = get_sort(a)
+    m, e = sizes(s)
+
+    a_mantissa = ZeroExt(m, s.mantissa(a))
+    b_mantissa = ZeroExt(m, s.mantissa(b))
+    mantissa_result = a_mantissa * b_mantissa
+    exponent_result = s.exponent(a) + s.exponent(b) + 1
+
+    result_sign = s.sign(a) ^ s.sign(b)
+    new_sort = FloatSort(mantissa_result.size(), exponent_result.size())
+    return result_sign, mantissa_result, exponent_result, new_sort 
+
 # Multiplies a with b
 def mul(a : DatatypeRef, b : DatatypeRef, rounding_mode : DatatypeRef = Truncate) -> DatatypeRef:
     ensure_eq_sort(a, b)
@@ -459,17 +473,8 @@ def mul(a : DatatypeRef, b : DatatypeRef, rounding_mode : DatatypeRef = Truncate
                      zero_case,
                      unpacked_normal_case))) # could still be zero or inf instead after the operation (underflow or overflow)
 
-    s = get_sort(a)
-    m, e = sizes(s)
-
-    a_mantissa = ZeroExt(m, s.mantissa(a))
-    b_mantissa = ZeroExt(m, s.mantissa(b))
-    mantissa_result = a_mantissa * b_mantissa
-    exponent_result = s.exponent(a) + s.exponent(b) + 1
-
-    result_sign = s.sign(a) ^ s.sign(b)
-    new_sort = FloatSort(mantissa_result.size(), exponent_result.size())
-
+    result_sign, mantissa_result, exponent_result, new_sort = __mul_core(a, b)
+    
     result = pack(FloatVar(result_sign, mantissa_result, exponent_result, new_sort), result_sort, rounding_mode, result_case)
     return result
 
@@ -631,8 +636,95 @@ def sqrt(a : DatatypeRef, rounding_mode : DatatypeRef = Truncate) -> DatatypeRef
 
 # Performs the operation a + (b * c)
 def fma(a : DatatypeRef, b : DatatypeRef, c : DatatypeRef, rounding_mode : DatatypeRef = Truncate) -> DatatypeRef:
-    return add(a, mul(b,c,rounding_mode), rounding_mode) # TODO: Fix incorrect impl (fma is add & multiply, but only rounds after both)
+    ensure_eq_sort(a, b)
+    ensure_eq_sort(a, c)
+    result_sort = get_sort(a)
+    old_a = a
 
+    case_a, a = unpack(a)
+    case_b, b = unpack(b)
+    case_c, c = unpack(c)
+
+    unpack_sort = get_sort(a)
+    unpack_m, unpack_e = sizes(unpack_sort)
+
+    # handle some special cases preemptively so we don't
+    # accidentally lose that information during the operation
+    # this is for the multiplication only, addition comes below
+    result_case = If(Or(case_b == nan_case, 
+                        case_c == nan_case, 
+                        And(case_b == inf_case, case_c == zero_case), 
+                        And(case_b == zero_case, case_c == inf_case)),
+                     nan_case,
+                  If(Or(case_b == inf_case, case_c == inf_case), 
+                     inf_case,
+                  If(Or(case_b == zero_case, case_c == zero_case),
+                     zero_case,
+                     unpacked_normal_case))) # could still be zero or inf instead after the operation (underflow or overflow)
+
+    sign_mul, mantissa_mul, exponent_mul, mul_sort = __mul_core(b, c)
+    mul_result = FloatVar(sign_mul, mantissa_mul, exponent_mul, mul_sort)
+
+    size_dif = mantissa_mul.size() - unpack_m
+    mantissa_a_new = ZeroExt(size_dif, unpack_sort.mantissa(a)) << size_dif #append size_dif many zeros to the right
+    extended_a = FloatVar(unpack_sort.sign(a), mantissa_a_new, unpack_sort.exponent(a), mul_sort)
+
+
+    intermediate_result = pack(mul_result, result_sort, rounding_mode, result_case)
+    case_mul, trash_value = unpack(intermediate_result)
+
+    #now handle changes to the case by the addition
+    result_case = If(
+        Or(
+            case_mul == nan_case, 
+            case_a == nan_case,
+        ),
+        nan_case,
+        If(
+            And(
+                case_mul == inf_case, 
+                case_a == inf_case
+            ),
+            If(
+                sign_mul != unpack_sort.sign(a),
+                nan_case, #pos_inf + neg_inf
+                inf_case
+            ),
+            If(
+                Or(
+                    case_mul == inf_case, 
+                    case_a == inf_case
+                ), 
+                inf_case,
+                unpacked_normal_case
+            )
+        )
+    )
+
+    # ensure that the first operand is the bigger one
+    x = If(gt(abs(intermediate_result), abs(old_a)), mul_result, extended_a)
+    y = If(gt(abs(intermediate_result), abs(old_a)), extended_a, mul_result)
+
+    sign_result, mantissa_result, exponent_result, new_sort = __add_core(x, y)
+
+    sign_result = If(
+        neg(intermediate_result) == old_a, #check if result is zero
+        If(
+            And(is_zero(old_a), old_a==intermediate_result),#both are zero and equal
+            mul_sort.sign(x),
+            If(
+                rounding_mode == Down,
+                BitVecVal(1, 1),#negative
+                BitVecVal(0, 1)#positive
+            )
+        ),
+        sign_result #result is not zero
+    )
+
+
+    result = pack(FloatVar(sign_result, mantissa_result, exponent_result, new_sort), result_sort, rounding_mode, result_case)
+    return result
+    
 # Returns a node containing a if a <= b and b else
 def min(a : DatatypeRef, b : DatatypeRef, rounding_mode : DatatypeRef = Truncate) -> DatatypeRef:
     return If(gte(a, b), b, a)
