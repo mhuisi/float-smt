@@ -191,12 +191,16 @@ def neg(a : DatatypeRef) -> DatatypeRef:
     sign = If(s.sign(a) == 1, BitVecVal(0, 1), BitVecVal(1, 1))
     return FloatVar(sign, s.mantissa(a), s.exponent(a), s)
 
-def match_sizes(xs):
+def matched_sizes(xs):
     max_size = -1
-    for x, _ in xs:
+    for x in xs:
         if x.size() > max_size:
             max_size = x.size()
-    return [SignExt(max_size - x.size(), x) if signed else ZeroExt(max_size - x.size(), x) for x, signed in xs]
+    return [max_size - x.size() for x in xs]
+
+def match_sizes(xs):
+    s = zip([x for x, _ in xs], matched_sizes([x for x, _ in xs]), [signed for _, signed in xs])
+    return [SignExt(n, x) if signed else ZeroExt(n, x) for x, n, signed in s]
 
 # function which ensures that value + added cannot overflow
 def guarantee_space(value, added, signed, offset=0):
@@ -204,7 +208,7 @@ def guarantee_space(value, added, signed, offset=0):
     # in order for value + added to not overflow, we need
     # 2**(n + k) - 2**n > added <=> 2**n*(2**k - 1) > added <=> k > log2(added/2**n + 1)
     added_bits = floor(log2(added/2**n + 1)) + 1 + offset
-    value = SignExt(added_bits, value) if signed else ZeroExt(added_bit, value)
+    value = SignExt(added_bits, value) if signed else ZeroExt(added_bits, value)
     return value
 
 # debug function to print bit repr of z3 bitvectors
@@ -285,6 +289,7 @@ def pack(f : DatatypeRef, sort : DatatypeSortRef, rounding_mode : DatatypeRef = 
     mantissa = s.mantissa(f)
     # add bias
     exponent = s.exponent(f) + BitVecVal(2**(e-1) - 1, e_old)
+    extra_mantissa_bits, _ = matched_sizes([mantissa, exponent])
     mantissa, exponent = match_sizes([(mantissa, False), (exponent, True)])
 
     added_leading_zeros = -exponent + 1
@@ -297,7 +302,7 @@ def pack(f : DatatypeRef, sort : DatatypeSortRef, rounding_mode : DatatypeRef = 
     mantissa = mantissa | sticky_bit
     exponent = exponent + added_leading_zeros
 
-    leading_zeros = utils.clz(mantissa)
+    leading_zeros = utils.clz(mantissa) - extra_mantissa_bits
     normal_pre_rounding = UGT(exponent, leading_zeros)
     # the 0 exponent is only used for signalling.
     # the real exponent is 1 => we can only remove exponent-1 many zeros

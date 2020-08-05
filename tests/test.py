@@ -450,6 +450,7 @@ class Operations(unittest.TestCase):
         pass
 
     def test_pack(self):
+
         case, unpacked = unpack(self.__pos_zero)
         self.true(eq_bitwise(pack(unpacked, self.__sort, Truncate, case), self.__pos_zero))
 
