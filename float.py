@@ -411,6 +411,22 @@ def add(a : DatatypeRef, b : DatatypeRef, rounding_mode : DatatypeRef = Truncate
     
     sign_result, mantissa_result, exponent_result, new_sort = __add_core(x, y)
 
+    #standard-conform zero sign handling:
+    sign_result = If(
+        neg(a) == b, #check if result is zero
+        If(
+            And(is_zero(a), a==b),#both are zero and equal
+            sort.sign(a),
+            If(
+                rounding_mode == Down,
+                BitVecVal(1, 1),#negative
+                BitVecVal(0, 1)#positive
+            )
+        ),
+        sign_result #result is not zero
+    )
+    
+
     return pack(FloatVar(sign_result, mantissa_result, exponent_result, new_sort), sort, rounding_mode, result_case)
 
 # Subtracts b from a

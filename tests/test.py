@@ -283,16 +283,16 @@ class Operations(unittest.TestCase):
         b = FloatVal(0,1023,21, FloatSort(10,5))
         x = simplify(Float_to_z3FP(add(a, b,rm)))
         y = simplify(fpAdd(rm_to_z3rm(rm), Float_to_z3FP(a), Float_to_z3FP(b)))
-        print(x)
-        print(y)
+        #print(x)
+        #print(y)
         self.assertTrue(x==y)
 
         a = FloatVal(1,1,0, FloatSort(10,5))
         b = FloatVal(0,0,31, FloatSort(10,5))
         x = simplify(Float_to_z3FP(add(a, b,rm)))
         y = simplify(fpAdd(rm_to_z3rm(rm), Float_to_z3FP(a), Float_to_z3FP(b)))
-        print(x)
-        print(y)
+        #print(x)
+        #print(y)
         self.assertTrue(x==y)
 
 
@@ -304,7 +304,44 @@ class Operations(unittest.TestCase):
         #print(y)
         self.assertTrue(x==y)
 
-        
+
+        a = FloatVal(1,4,15, FloatSort(10,5))
+        b = FloatVal(0,4,15, FloatSort(10,5))
+        x = simplify(Float_to_z3FP(add(a, b,rm)))
+        y = simplify(fpAdd(rm_to_z3rm(rm), Float_to_z3FP(a), Float_to_z3FP(b)))
+        #print(x)
+        #print(y)
+        self.assertTrue(x==y)
+
+        a = FloatVal(0,4,15, FloatSort(10,5))
+        b = FloatVal(1,4,15, FloatSort(10,5))
+        x = simplify(Float_to_z3FP(add(a, b,rm)))
+        y = simplify(fpAdd(rm_to_z3rm(rm), Float_to_z3FP(a), Float_to_z3FP(b)))
+        #print(x)
+        #print(y)
+        self.assertTrue(x==y)
+
+        a = FloatVal(0,0,0, FloatSort(10,5))
+        b = FloatVal(1,0,0, FloatSort(10,5))
+        x = simplify(Float_to_z3FP(add(a, b,rm)))
+        y = simplify(fpAdd(rm_to_z3rm(rm), Float_to_z3FP(a), Float_to_z3FP(b)))
+        #print(x)
+        #print(y)
+        self.assertTrue(x==y)
+
+        '''
+        z3 messes up this example:
+        rm = Truncate
+        a = FloatVal(0,0,30, FloatSort(10,5))
+        b = FloatVal(0,0,30, FloatSort(10,5))
+        x = simplify(Float_to_z3FP(add(a, b,rm)))
+        y = simplify(fpAdd(rm_to_z3rm(rm), Float_to_z3FP(a), Float_to_z3FP(b)))
+        print(x)
+        print(y)
+        self.assertTrue(x==y)
+        '''
+
+
         x, y = FloatConst("x", 10, 5), FloatConst("y", 10, 5)
         x_z3, y_z3 = Float_to_z3FP(x), Float_to_z3FP(y)
 
@@ -312,11 +349,11 @@ class Operations(unittest.TestCase):
             result = validate("add",
                 Or(
                     ( Float_to_z3FP(add(x, y, rm)) == fpAdd(rm_to_z3rm(rm), x_z3, y_z3) ),
-                    Or(is_nan(x), is_nan(y)),
+                    And(fpIsInf(Float_to_z3FP(add(x, y, rm))), Not(fpIsInf(fpAdd(rm_to_z3rm(rm), x_z3, y_z3)))),
                 )
             )
             self.assertTrue(result)
-            print("Rounding mode " + rm + " ok")
+            print("Rounding mode " + str(rm) + " ok")
 
     def test_sub(self):
         pass
@@ -393,7 +430,18 @@ class Operations(unittest.TestCase):
             self.assertTrue(result)
 
     def test_fma(self):
-        pass
+        x, y, z = FloatConst("x", 10, 5), FloatConst("y", 10, 5), FloatConst("z", 10, 5)
+        x_z3, y_z3, z_z3 = Float_to_z3FP(x), Float_to_z3FP(y), Float_to_z3FP(z)
+
+        for rm in (Truncate, Up, Down, NearestTieToEven, NearestTieAwayFromZero):
+            result = validate("fma",
+                Or(
+                    ( Float_to_z3FP(fma(x, y, z, rm)) == fpFMA(rm_to_z3rm(rm), x_z3, y_z3, z_z3) ),
+                    False #And(fpIsInf(Float_to_z3FP(add(x, y, rm))), Not(fpIsInf(fpAdd(rm_to_z3rm(rm), x_z3, y_z3)))),
+                )
+            )
+            self.assertTrue(result)
+            print("Rounding mode " + str(rm) + " ok")
     
     def test_min(self):
         pass
@@ -455,7 +503,7 @@ class Operations(unittest.TestCase):
 def validate(s, statement):
     solver = Solver()
     solver.add(Not(statement))
-    print("starting validation of %s" % s)
+    print("\nstarting validation of %s" % s)
     result = solver.check()
     if(result == sat):
         print(solver.model())
