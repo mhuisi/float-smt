@@ -334,7 +334,7 @@ def pack(f : DatatypeRef, sort : DatatypeSortRef, rounding_mode : DatatypeRef = 
 
 
 
-def __add_core(x, y):
+def __add_core(x: DatatypeRef, y: DatatypeRef):
     old_sort = get_sort(x)
     m,e = sizes(old_sort)
 
@@ -433,6 +433,20 @@ def add(a : DatatypeRef, b : DatatypeRef, rounding_mode : DatatypeRef = Truncate
 def sub(a : DatatypeRef, b : DatatypeRef, rounding_mode : DatatypeRef = Truncate) -> DatatypeRef:
     return add(a, neg(b))
 
+
+def __mul_core(a: DatatypeRef, b: DatatypeRef):
+    s = get_sort(a)
+    m, e = sizes(s)
+
+    a_mantissa = ZeroExt(m, s.mantissa(a))
+    b_mantissa = ZeroExt(m, s.mantissa(b))
+    mantissa_result = a_mantissa * b_mantissa
+    exponent_result = s.exponent(a) + s.exponent(b) + 1
+
+    result_sign = s.sign(a) ^ s.sign(b)
+    new_sort = FloatSort(mantissa_result.size(), exponent_result.size())
+    return result_sign, mantissa_result, exponent_result, new_sort 
+
 # Multiplies a with b
 def mul(a : DatatypeRef, b : DatatypeRef, rounding_mode : DatatypeRef = Truncate) -> DatatypeRef:
     ensure_eq_sort(a, b)
@@ -454,17 +468,8 @@ def mul(a : DatatypeRef, b : DatatypeRef, rounding_mode : DatatypeRef = Truncate
                      zero_case,
                      unpacked_normal_case))) # could still be zero or inf instead after the operation (underflow or overflow)
 
-    s = get_sort(a)
-    m, e = sizes(s)
-
-    a_mantissa = ZeroExt(m, s.mantissa(a))
-    b_mantissa = ZeroExt(m, s.mantissa(b))
-    mantissa_result = a_mantissa * b_mantissa
-    exponent_result = s.exponent(a) + s.exponent(b) + 1
-
-    result_sign = s.sign(a) ^ s.sign(b)
-    new_sort = FloatSort(mantissa_result.size(), exponent_result.size())
-
+    result_sign, mantissa_result, exponent_result, new_sort = __mul_core(a, b)
+    
     result = pack(FloatVar(result_sign, mantissa_result, exponent_result, new_sort), result_sort, rounding_mode, result_case)
     return result
 
@@ -626,6 +631,7 @@ def sqrt(a : DatatypeRef, rounding_mode : DatatypeRef = Truncate) -> DatatypeRef
 
 # Performs the operation a + (b * c)
 def fma(a : DatatypeRef, b : DatatypeRef, c : DatatypeRef, rounding_mode : DatatypeRef = Truncate) -> DatatypeRef:
+    
     return add(a, mul(b,c,rounding_mode), rounding_mode) # TODO: Fix incorrect impl (fma is add & multiply, but only rounds after both)
 
 # Returns a node containing a if a <= b and b else
