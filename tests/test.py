@@ -1,5 +1,7 @@
 import unittest
 from float import *
+set_param('parallel.enable', True)
+set_option("parallel.threads.max", 4)
 
 class Float(unittest.TestCase):
     def test_float_field_sizes(self):
@@ -542,6 +544,8 @@ class Operations(unittest.TestCase):
 
 def validate(s, statement):
     solver = Solver()
+    set_param("parallel.enable", True)
+    set_param("parallel.threads.max", 4)
     solver.add(Not(statement))
     print("\nstarting validation of %s" % s)
     result = solver.check()
