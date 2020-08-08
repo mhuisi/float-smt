@@ -671,13 +671,12 @@ def fma(a : DatatypeRef, b : DatatypeRef, c : DatatypeRef, rounding_mode : Datat
     extended_a = FloatVar(unpack_sort.sign(a), mantissa_a_new, unpack_sort.exponent(a), mul_sort)
 
     intermediate_result = pack(mul_result, result_sort, rounding_mode, result_case)
-    case_mul, trash_value = unpack(intermediate_result)
 
 
     #resolve troubles due to multiple operations being executed
     mul_sort = FloatSort(m_mul-1, e_mul)
-    mul_result = pack(mul_result, mul_sort)
-    extended_a = pack(extended_a, mul_sort)
+    mul_result = pack(mul_result, mul_sort, Truncate, result_case) #Truncate due to no bits being cut off
+    extended_a = pack(extended_a, mul_sort, Truncate) #Truncate due to no bits being cut off
 
     # ensure that the first operand is the bigger one
     x = If(gt(abs(intermediate_result), abs(old_a)), mul_result, extended_a)
