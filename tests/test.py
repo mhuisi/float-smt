@@ -446,8 +446,8 @@ class Operations(unittest.TestCase):
         c = FloatVal(0, 86, 1, FloatSort(10,5))
         x = simplify(Float_to_z3FP(fma(a, b, c, rm)))
         y = simplify(fpFMA(rm_to_z3rm(rm), Float_to_z3FP(b), Float_to_z3FP(c), Float_to_z3FP(a)))
-        print(x)
-        print(y)
+        #print(x)
+        #print(y)
         self.assertTrue(x==y)
 
 
@@ -456,8 +456,17 @@ class Operations(unittest.TestCase):
         c = FloatVal(0, 16, 11, FloatSort(10,5))
         x = simplify(Float_to_z3FP(fma(a, b, c, rm)))
         y = simplify(fpFMA(rm_to_z3rm(rm), Float_to_z3FP(b), Float_to_z3FP(c), Float_to_z3FP(a)))
-        print(x)
-        print(y)
+        #print(x)
+        #print(y)
+        self.assertTrue(x==y)
+
+        a = FloatVal(0, 2, 0, FloatSort(10,5))
+        b = FloatVal(0, 465, 3, FloatSort(10,5))
+        c = FloatVal(1, 517, 3, FloatSort(10,5))
+        x = simplify(Float_to_z3FP(fma(a, b, c, rm)))
+        y = simplify(fpFMA(rm_to_z3rm(rm), Float_to_z3FP(b), Float_to_z3FP(c), Float_to_z3FP(a)))
+        #print(x)
+        #print(y)
         self.assertTrue(x==y)
         
         x, y, z = FloatConst("x", 10, 5), FloatConst("y", 10, 5), FloatConst("z", 10, 5)
@@ -467,7 +476,7 @@ class Operations(unittest.TestCase):
             result = validate("fma",
                 Or(
                     ( Float_to_z3FP(fma(x, y, z, rm)) == fpFMA(rm_to_z3rm(rm), y_z3, z_z3, x_z3) ),
-                    False #And(fpIsInf(Float_to_z3FP(add(x, y, rm))), Not(fpIsInf(fpAdd(rm_to_z3rm(rm), x_z3, y_z3)))),
+                    And(fpIsInf(Float_to_z3FP(fma(x, y, z, rm))), Not(fpIsInf(fpFMA(rm_to_z3rm(rm), y_z3, z_z3, x_z3)))),
                 )
             )
             self.assertTrue(result)

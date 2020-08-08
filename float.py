@@ -664,11 +664,11 @@ def fma(a : DatatypeRef, b : DatatypeRef, c : DatatypeRef, rounding_mode : Datat
 
     sign_mul, mantissa_mul, exponent_mul, mul_sort = __mul_core(b, c)
     mul_result = FloatVar(sign_mul, mantissa_mul, exponent_mul, mul_sort)
+    m_mul, e_mul = sizes(mul_sort)
 
     size_dif = mantissa_mul.size() - unpack_m
     mantissa_a_new = ZeroExt(size_dif, unpack_sort.mantissa(a)) << size_dif #append size_dif many zeros to the right
     extended_a = FloatVar(unpack_sort.sign(a), mantissa_a_new, unpack_sort.exponent(a), mul_sort)
-
 
     intermediate_result = pack(mul_result, result_sort, rounding_mode, result_case)
     case_mul, trash_value = unpack(intermediate_result)
@@ -701,11 +701,18 @@ def fma(a : DatatypeRef, b : DatatypeRef, c : DatatypeRef, rounding_mode : Datat
         )
     )
 
+    #resolve troubles due to multiple operations being executed
+    mul_sort = FloatSort(m_mul-1, e_mul)
+    mul_result = pack(mul_result, mul_sort)
+    extended_a = pack(extended_a, mul_sort)
+
     # ensure that the first operand is the bigger one
     x = If(gt(abs(intermediate_result), abs(old_a)), mul_result, extended_a)
     y = If(gt(abs(intermediate_result), abs(old_a)), extended_a, mul_result)
 
-    sign_result, mantissa_result, exponent_result, new_sort = __add_core(x, y)
+    extended_result = add(x, y)
+    case_result, result_unpacked = unpack(extended_result)
+    sign_result = get_sort(result_unpacked).sign(result_unpacked)
 
     sign_result = If(
         neg(intermediate_result) == old_a, #check if result is zero
@@ -722,7 +729,7 @@ def fma(a : DatatypeRef, b : DatatypeRef, c : DatatypeRef, rounding_mode : Datat
     )
 
 
-    result = pack(FloatVar(sign_result, mantissa_result, exponent_result, new_sort), result_sort, rounding_mode, result_case)
+    result = pack(result_unpacked, result_sort, rounding_mode, result_case)
     return result
     
 # Returns a node containing a if a <= b and b else
