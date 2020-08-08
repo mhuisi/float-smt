@@ -673,33 +673,6 @@ def fma(a : DatatypeRef, b : DatatypeRef, c : DatatypeRef, rounding_mode : Datat
     intermediate_result = pack(mul_result, result_sort, rounding_mode, result_case)
     case_mul, trash_value = unpack(intermediate_result)
 
-    #now handle changes to the case by the addition
-    result_case = If(
-        Or(
-            case_mul == nan_case, 
-            case_a == nan_case,
-        ),
-        nan_case,
-        If(
-            And(
-                case_mul == inf_case, 
-                case_a == inf_case
-            ),
-            If(
-                sign_mul != unpack_sort.sign(a),
-                nan_case, #pos_inf + neg_inf
-                inf_case
-            ),
-            If(
-                Or(
-                    case_mul == inf_case, 
-                    case_a == inf_case
-                ), 
-                inf_case,
-                unpacked_normal_case
-            )
-        )
-    )
 
     #resolve troubles due to multiple operations being executed
     mul_sort = FloatSort(m_mul-1, e_mul)
@@ -711,23 +684,8 @@ def fma(a : DatatypeRef, b : DatatypeRef, c : DatatypeRef, rounding_mode : Datat
     y = If(gt(abs(intermediate_result), abs(old_a)), extended_a, mul_result)
 
     extended_result = add(x, y)
-    case_result, result_unpacked = unpack(extended_result)
+    result_case, result_unpacked = unpack(extended_result)
     sign_result = get_sort(result_unpacked).sign(result_unpacked)
-
-    sign_result = If(
-        neg(intermediate_result) == old_a, #check if result is zero
-        If(
-            And(is_zero(old_a), old_a==intermediate_result),#both are zero and equal
-            mul_sort.sign(x),
-            If(
-                rounding_mode == Down,
-                BitVecVal(1, 1),#negative
-                BitVecVal(0, 1)#positive
-            )
-        ),
-        sign_result #result is not zero
-    )
-
 
     result = pack(result_unpacked, result_sort, rounding_mode, result_case)
     return result
