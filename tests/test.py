@@ -470,8 +470,38 @@ class Operations(unittest.TestCase):
         #print(x)
         #print(y)
         self.assertTrue(x==y)
+
+        a = FloatVal(1, 2, 0, FloatSort(3,2))
+        b = FloatVal(0, 0, 3, FloatSort(3,2))
+        c = FloatVal(0, 0, 3, FloatSort(3,2))
+        x = simplify(Float_to_z3FP(fma(a, b, c, rm)))
+        y = simplify(fpFMA(rm_to_z3rm(rm), Float_to_z3FP(b), Float_to_z3FP(c), Float_to_z3FP(a)))
+        #print(x)
+        #print(y)
+        self.assertTrue(x==y)
+
+        a = FloatVal(1, 28, 7, FloatSort(5,3))
+        b = FloatVal(0, 9, 1, FloatSort(5,3))
+        c = FloatVal(0, 12, 2, FloatSort(5,3))
+        x = simplify(Float_to_z3FP(fma(a, b, c, rm)))
+        y = simplify(fpFMA(rm_to_z3rm(rm), Float_to_z3FP(b), Float_to_z3FP(c), Float_to_z3FP(a)))
+        #print(x)
+        #print(y)
+        self.assertTrue(x==y)
+
+
+        '''z3 messes up the following one
+        a = FloatVal(0, 16, 3, FloatSort(5,3))
+        b = FloatVal(0, 7, 6, FloatSort(5,3))
+        c = FloatVal(0, 21, 5, FloatSort(5,3))
+        x = simplify(Float_to_z3FP(fma(a, b, c, rm)))
+        y = simplify(fpFMA(rm_to_z3rm(rm), Float_to_z3FP(b), Float_to_z3FP(c), Float_to_z3FP(a)))
+        print(x)
+        print(y)
+        self.assertTrue(x==y)
+        '''
         
-        x, y, z = FloatConst("x", 10, 5), FloatConst("y", 10, 5), FloatConst("z", 10, 5)
+        x, y, z = FloatConst("x", 5, 3), FloatConst("y", 5, 3), FloatConst("z", 5, 3)
         x_z3, y_z3, z_z3 = Float_to_z3FP(x), Float_to_z3FP(y), Float_to_z3FP(z)
 
         for rm in (Truncate, Up, Down, NearestTieToEven, NearestTieAwayFromZero):

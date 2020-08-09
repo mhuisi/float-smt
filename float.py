@@ -674,7 +674,7 @@ def fma(a : DatatypeRef, b : DatatypeRef, c : DatatypeRef, rounding_mode : Datat
 
 
     #resolve troubles due to multiple operations being executed
-    mul_sort = FloatSort(m_mul-1, e_mul)
+    mul_sort = FloatSort(m_mul-1, e_mul-2) #-1 due to implicit bit, -2 to get back to original exponent size (revert unpack)
     mul_result = pack(mul_result, mul_sort, Truncate, result_case) #Truncate due to no bits being cut off
     extended_a = pack(extended_a, mul_sort, Truncate, case_a) #Truncate due to no bits being cut off
 
