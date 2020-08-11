@@ -496,8 +496,8 @@ class Operations(unittest.TestCase):
         c = FloatVal(0, 26, 6, FloatSort(5,3))
         x = simplify(Float_to_z3FP(fma(a, b, c, rm)))
         y = simplify(fpFMA(rm_to_z3rm(rm), Float_to_z3FP(b), Float_to_z3FP(c), Float_to_z3FP(a)))
-        print(x)
-        print(y)
+        #print(x)
+        #print(y)
         self.assertTrue(x==y) 
 
 
@@ -507,8 +507,8 @@ class Operations(unittest.TestCase):
         c = FloatVal(1, 0, 1, FloatSort(3,2))
         x = simplify(Float_to_z3FP(fma(a, b, c, rm)))
         y = simplify(fpFMA(rm_to_z3rm(rm), Float_to_z3FP(b), Float_to_z3FP(c), Float_to_z3FP(a)))
-        print(x)
-        print(y)
+        #print(x)
+        #print(y)
         self.assertTrue(x==y)
 
         
@@ -533,7 +533,6 @@ class Operations(unittest.TestCase):
                 Or(
                     ( Float_to_z3FP(fma(x, y, z, rm)) == fpFMA(rm_to_z3rm(rm), y_z3, z_z3, x_z3) ),
                     And(fpIsInf(Float_to_z3FP(fma(x, y, z, rm))), Not(fpIsInf(fpFMA(rm_to_z3rm(rm), y_z3, z_z3, x_z3)))),
-                    And(is_nan(fma(x, y, z, rm)), fpIsInf(fpFMA(rm_to_z3rm(rm), y_z3, z_z3, x_z3)))#TODO: think about nan for -oo + +oo in fma 
                 )
             )
             self.assertTrue(result)
