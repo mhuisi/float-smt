@@ -671,7 +671,7 @@ def fma(a : DatatypeRef, b : DatatypeRef, c : DatatypeRef, rounding_mode : Datat
     extended_a = FloatVar(unpack_sort.sign(a), mantissa_a_new, unpack_sort.exponent(a), mul_sort)
 
     intermediate_result = pack(mul_result, result_sort, rounding_mode, result_case)
-
+    
 
     #resolve troubles due to multiple operations being executed
     mul_sort = FloatSort(m_mul-1, e_mul-2) #-1 due to implicit bit, -2 to get back to original exponent size (revert unpack)
@@ -682,11 +682,26 @@ def fma(a : DatatypeRef, b : DatatypeRef, c : DatatypeRef, rounding_mode : Datat
     x = If(gt(abs(intermediate_result), abs(old_a)), mul_result, extended_a)
     y = If(gt(abs(intermediate_result), abs(old_a)), extended_a, mul_result)
 
-    extended_result = add(x, y)
+    extended_result = add(x, y, rounding_mode)
     result_case, result_unpacked = unpack(extended_result)
     sign_result = get_sort(result_unpacked).sign(result_unpacked)
 
     result = pack(result_unpacked, result_sort, rounding_mode, result_case)
+
+    #for the rare case that the multiplication overflows and the addition being with the opposite inf
+    result = If(
+        And(
+            is_inf(intermediate_result), 
+            And(
+                Not(case_b == inf_case),
+                Not(case_c == inf_case)
+            ),
+            case_a == inf_case
+        ),
+        old_a,
+        result
+    )
+
     return result
     
 # Returns a node containing a if a <= b and b else
