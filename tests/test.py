@@ -1,4 +1,5 @@
 import unittest
+import itertools
 from float import *
 set_param('parallel.enable', True)
 set_option("parallel.threads.max", 4)
@@ -343,7 +344,22 @@ class Operations(unittest.TestCase):
         self.assertTrue(x==y)
         '''
 
+        #very small floats
+        x, y = FloatConst("x", 3, 2), FloatConst("y", 3, 2)
+        x_z3, y_z3 = Float_to_z3FP(x), Float_to_z3FP(y)
 
+        for rm in (Truncate, Up, Down, NearestTieToEven, NearestTieAwayFromZero):
+            result = validate("add",
+                Or(
+                    ( Float_to_z3FP(add(x, y, rm)) == fpAdd(rm_to_z3rm(rm), x_z3, y_z3) ),
+                    And(fpIsInf(Float_to_z3FP(add(x, y, rm))), Not(fpIsInf(fpAdd(rm_to_z3rm(rm), x_z3, y_z3)))),
+                )
+            )
+            self.assertTrue(result)
+            print("Rounding mode " + str(rm) + " ok")
+
+
+        #half precision
         x, y = FloatConst("x", 10, 5), FloatConst("y", 10, 5)
         x_z3, y_z3 = Float_to_z3FP(x), Float_to_z3FP(y)
 
@@ -471,6 +487,16 @@ class Operations(unittest.TestCase):
         #print(y)
         self.assertTrue(x==y)
 
+        #weird stuff is happening:
+        a = FloatVal(1, 3, 0, FloatSort(2,2))
+        b = FloatVal(0, 3, 1, FloatSort(2,2))
+        c = FloatVal(0, 1, 1, FloatSort(2,2))
+        x = simplify(Float_to_z3FP(fma(a, b, c, rm)))
+        y = simplify(fpFMA(rm_to_z3rm(rm), Float_to_z3FP(b), Float_to_z3FP(c), Float_to_z3FP(a)))
+        #print(x)
+        #print(y)
+        #self.assertTrue(x==y)
+
         a = FloatVal(1, 2, 0, FloatSort(3,2))
         b = FloatVal(0, 0, 3, FloatSort(3,2))
         c = FloatVal(0, 0, 3, FloatSort(3,2))
@@ -511,7 +537,36 @@ class Operations(unittest.TestCase):
         #print(y)
         self.assertTrue(x==y)
 
+
+        rm = Down
+        a = FloatVal(0, 7, 0, FloatSort(3,2))
+        b = FloatVal(0, 7, 0, FloatSort(3,2))
+        c = FloatVal(1, 0, 1, FloatSort(3,2))
+        x = simplify(Float_to_z3FP(fma(a, b, c, rm)))
+        y = simplify(fpFMA(rm_to_z3rm(rm), Float_to_z3FP(b), Float_to_z3FP(c), Float_to_z3FP(a)))
+        #print(x)
+        #print(y)
+        self.assertTrue(x==y)
         
+
+        #bruteforce: (commented out due to poor performance)
+        '''
+        m,e = 3,2
+        def statement(vars):
+            rm = Down
+            a = FloatVal(vars[0][0], vars[0][1], vars[0][2], FloatSort(m,e))
+            b = FloatVal(vars[1][0], vars[1][1], vars[1][2], FloatSort(m,e))
+            c = FloatVal(vars[2][0], vars[2][1], vars[2][2], FloatSort(m,e))
+            x = simplify(Float_to_z3FP(fma(a, b, c, rm)))
+            y = simplify(fpFMA(rm_to_z3rm(rm), Float_to_z3FP(b), Float_to_z3FP(c), Float_to_z3FP(a)))
+            if simplify(x!=y):
+                print(x)
+                print(y)
+            self.assertTrue(x==y or simplify(And(fpIsInf(Float_to_z3FP(fma(a, b, c, rm))), Not(fpIsInf(fpFMA(rm_to_z3rm(rm), Float_to_z3FP(b), Float_to_z3FP(c), Float_to_z3FP(a)))))))
+
+        variables = (FloatConst("a", m, e), FloatConst("b", m, e), FloatConst("c", m, e))
+        bruteforce(variables,statement)
+        '''
 
 
         '''z3 messes up the following one
@@ -525,7 +580,7 @@ class Operations(unittest.TestCase):
         self.assertTrue(x==y)
         '''
         
-        x, y, z = FloatConst("x", 3, 2), FloatConst("y", 3, 2), FloatConst("z", 3, 2)
+        x, y, z = FloatConst("x", 4, 2), FloatConst("y", 4, 2), FloatConst("z", 4, 2)
         x_z3, y_z3, z_z3 = Float_to_z3FP(x), Float_to_z3FP(y), Float_to_z3FP(z)
 
         for rm in (Truncate, Up, Down, NearestTieToEven, NearestTieAwayFromZero):
@@ -607,6 +662,29 @@ def validate(s, statement):
         print(solver.model())
     return result == unsat
 
+
+
+def bruteforce(variables, func):
+    sort = get_sort(variables[0])
+    m_size, e_size = sizes(sort)
+    m_min, e_min, s_min = 0, 0, 0
+    m_max, e_max, s_max = 2**m_size-1, 2**e_size-1, 1
+
+    
+    vals = []
+    for s in range(s_min, s_max):
+        for m in range(m_min, m_max):
+            for e in range(e_min, e_max):
+                vals.append((s,m,e))
+
+
+    solutions = itertools.product(vals, repeat = len(variables))
+    
+    for sol in solutions:
+        print(sol)
+        func(sol)
+    
+    
 
 if __name__ == '__main__':
     unittest.main()

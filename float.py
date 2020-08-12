@@ -623,9 +623,11 @@ def sqrt(a : DatatypeRef, rounding_mode : DatatypeRef = Truncate) -> DatatypeRef
     exponent_result = sort.exponent(a) / 2 #TODO: check if this is true
     solution = FloatVar(BitVecVal(1,1), mantissa_result, exponent_result, sort)
 
+
+    
     #Special cases:
-    solution = If(Or(is_zero(a), is_nan(a)), #this shouldn't be necessary for zero, but could speed up the cases. neg_zero is also specifically pointed out in the standard
-                    a,
+    solution = If(Or(is_zero(a), is_nan(a), is_pos_inf(a)), #this shouldn't be necessary for zero, but could speed up the cases. neg_zero is also specifically pointed out in the standard
+                    a, # sqrt(-0) = -0 like in the standard, sqrt(nan) = nan, sqrt(+inf)=+inf
                     If(lt(a, FloatValZero(sort, 1)),
                         FloatValNaN(sort),
                         solution
