@@ -547,7 +547,27 @@ class Operations(unittest.TestCase):
         #print(x)
         #print(y)
         self.assertTrue(x==y)
-        
+
+        rm = Up
+        a = FloatVal(0, 25, 0, FloatSort(5,3))
+        b = FloatVal(1, 13, 0, FloatSort(5,3))
+        c = FloatVal(1, 21, 4, FloatSort(5,3))
+        x = simplify(Float_to_z3FP(fma(a, b, c, rm)))
+        y = simplify(fpFMA(rm_to_z3rm(rm), Float_to_z3FP(b), Float_to_z3FP(c), Float_to_z3FP(a)))
+        #print(x)
+        #print(y)
+        self.assertTrue(x==y)
+
+
+        for rm in (Truncate, Up, Down, NearestTieToEven, NearestTieAwayFromZero):
+            b = FloatVal(0, 28, 0, FloatSort(5,3))
+            a = FloatVal(0, 29, 0, FloatSort(5,3))
+            c = FloatVal(0, 10, 3, FloatSort(5,3))
+            x = simplify(Float_to_z3FP(fma(a, b, c, rm)))
+            y = simplify(fpFMA(rm_to_z3rm(rm), Float_to_z3FP(b), Float_to_z3FP(c), Float_to_z3FP(a)))
+            print(x)
+            print(y)
+            self.assertTrue(x==y)
 
         #bruteforce: (commented out due to poor performance)
         '''
@@ -580,7 +600,7 @@ class Operations(unittest.TestCase):
         self.assertTrue(x==y)
         '''
         
-        x, y, z = FloatConst("x", 4, 2), FloatConst("y", 4, 2), FloatConst("z", 4, 2)
+        x, y, z = FloatConst("x", 5, 3), FloatConst("y", 5, 3), FloatConst("z", 5, 3)
         x_z3, y_z3, z_z3 = Float_to_z3FP(x), Float_to_z3FP(y), Float_to_z3FP(z)
 
         for rm in (Truncate, Up, Down, NearestTieToEven, NearestTieAwayFromZero):
