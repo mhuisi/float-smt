@@ -22,6 +22,54 @@ class Float(unittest.TestCase):
             )
         )
         self.assertTrue(result)
+    
+    def test_precision_conversion(self):
+        
+        
+        
+        rm = Truncate
+        m, e, m_result, e_result = 23,8,  10,5
+        a = FloatVal(0, 50, 10, FloatSort(m,e))
+        x = simplify(Float_to_z3FP(convert_float(a, FloatSort(m_result, e_result), rm)))
+        y = simplify(fpFPToFP(rm_to_z3rm(rm), Float_to_z3FP(a), FPSort(e_result, m_result+1)))
+        result = simplify(x == y)
+        self.assertTrue(result)
+
+
+        rm = Truncate
+        m, e, m_result, e_result = 10,5,  3,2
+        a = FloatVal(0, 192, 3, FloatSort(m,e))
+        x = simplify(Float_to_z3FP(convert_float(a, FloatSort(m_result, e_result), rm)))
+        y = simplify(fpFPToFP(rm_to_z3rm(rm), Float_to_z3FP(a), FPSort(e_result, m_result+1)))
+        result = simplify(x == y)
+        self.assertTrue(result)
+
+        '''z3 messes this one up:
+        rm = Truncate
+        m, e, m_result, e_result = 5,3,  3,2
+        a = FloatVal(1, 9, 5, FloatSort(m,e))
+        x = simplify(Float_to_z3FP(convert_float(a, FloatSort(m_result, e_result), rm)))
+        y = simplify(fpFPToFP(rm_to_z3rm(rm), Float_to_z3FP(a), FPSort(e_result, m_result+1)))
+        result = simplify(x == y)
+        self.assertTrue(result)
+        '''
+        
+        
+        for (m,e) in ((3,2), (5,3), (10,5), (23,8), (100,63)):
+            for (m_result, e_result) in ((3,2), (5,3), (10,5), (23,8)):
+                result_sort = FloatSort(m_result, e_result)
+                result_sort_z3 = FPSort(e_result, m_result+1)
+                x = FloatConst("x", m, e)
+                x_z3 = Float_to_z3FP(x)
+
+                for rm in (Truncate, Up, Down, NearestTieToEven, NearestTieAwayFromZero):
+                    result = validate("conversion " + str((m,e)) + "->" + str((m_result,e_result)) + " " + str(rm),
+                            Or(( Float_to_z3FP(convert_float(x, result_sort, rm)) == fpFPToFP(rm_to_z3rm(rm), x_z3, result_sort_z3) ),
+                                (And(fpIsInf(Float_to_z3FP(convert_float(x, result_sort, rm))), Not(fpIsInf(fpFPToFP(rm_to_z3rm(rm), x_z3, result_sort_z3))))))
+                    )
+                    self.assertTrue(result)
+
+        
 
 class is_functions(unittest.TestCase):
     __mantissa_size, __exponent_size = 2, 3

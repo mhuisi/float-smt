@@ -3,6 +3,7 @@ from typing import List
 import converter
 import utils.utils as utils
 from math import log2, floor
+import math
 
 RoundingMode, (NearestTieToEven, NearestTieAwayFromZero, Up, Down, Truncate) = EnumSort("RoundingMode", [
     "NearestTieToEven", 
@@ -707,12 +708,12 @@ def fma(a, b, c, rounding_mode : DatatypeRef = Truncate) -> DatatypeRef:
     return result
     
 # Returns a node containing a if a <= b and b else
-def min(a : DatatypeRef, b : DatatypeRef, rounding_mode : DatatypeRef = Truncate) -> DatatypeRef:
+def min_float(a : DatatypeRef, b : DatatypeRef, rounding_mode : DatatypeRef = Truncate) -> DatatypeRef:
     return If(gte(a, b), b, a)
 
 # Returns a node containing a if a >= b and b else
-def max(a : DatatypeRef, b : DatatypeRef, rounding_mode : DatatypeRef = Truncate) -> DatatypeRef:
-    return neg(min(neg(a), neg(b)))
+def max_float(a : DatatypeRef, b : DatatypeRef, rounding_mode : DatatypeRef = Truncate) -> DatatypeRef:
+    return neg(min_float(neg(a), neg(b)))
 
 def Float_to_z3FP(x : DatatypeRef) -> FPRef:
     sort = get_sort(x)
@@ -743,3 +744,22 @@ def z3rm_to_rm(rm: RoundingMode) -> FPRMRef:
         RoundTowardZero(): Truncate,
     }
     return switch.get(rm, -1) #Using -1 as an error return value
+
+
+def convert_float(a: DatatypeRef, new_sort: DatatypeSortRef, rm: RoundingMode) -> DatatypeRef:
+    old_sort = get_sort(a)
+    case_a, a = unpack(a)
+    unpacked_sort = get_sort(a)
+
+    m_old, e_old = sizes(old_sort)
+    m_new, e_new = sizes(new_sort)
+
+    size_dif_m = max(m_new - m_old, 0)
+    size_dif_e = max(e_new - e_old, 0)
+
+    mantissa_new = ZeroExt(size_dif_m, unpacked_sort.mantissa(a)) << size_dif_m #append size_dif many zeros to the right
+    exponent_new = SignExt(size_dif_e, unpacked_sort.exponent(a))
+    extended_sort = FloatSort(mantissa_new.size(), exponent_new.size())
+
+    result_extended = FloatVar(unpacked_sort.sign(a), mantissa_new, exponent_new, extended_sort)
+    return pack(result_extended, new_sort, rm, case_a)
