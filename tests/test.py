@@ -437,15 +437,32 @@ class Operations(unittest.TestCase):
             self.assertTrue(result)
 
     def test_rem(self):
-        x, y = FloatConst("x", 10, 5), FloatConst("y", 10, 5)
+        '''
+        a = FloatVal(1,1,1, FloatSort(5,3))
+        b = FloatVal(1,3,0, FloatSort(5,3))
+        x = simplify(Float_to_z3FP(rem(a, b)))
+        y = simplify(fpRem(Float_to_z3FP(a), Float_to_z3FP(b)))
+        self.assertTrue(x==y)
+
+        a = FloatVal(0,13,2, FloatSort(5,3))
+        b = FloatVal(1,15,0, FloatSort(5,3))
+        x = simplify(Float_to_z3FP(rem(a, b)))
+        y = simplify(fpRem(Float_to_z3FP(a), Float_to_z3FP(b)))
+        self.assertTrue(x==y)
+        '''
+
+        a = FloatVal(1,8,6, FloatSort(5,3))
+        b = FloatVal(0,4,0, FloatSort(5,3))
+        print(simplify(Float_to_z3FP(a)), simplify(Float_to_z3FP(b)))
+        x = simplify(Float_to_z3FP(rem(a, b)))
+        y = simplify(fpRem(Float_to_z3FP(a), Float_to_z3FP(b)))
+        print(x, y)
+        self.assertTrue(x==y)
+
+        x, y = FloatConst("x", 5, 3), FloatConst("y", 5, 3)
         x_z3, y_z3 = Float_to_z3FP(x), Float_to_z3FP(y)
         result = validate("rem",
-            Or(
-                ( Float_to_z3FP(rem(x, y)) == fpRem(x_z3, y_z3) ),
-                Or(is_nan(x), is_nan(y)),
-                Or(is_subnormal(x), is_subnormal(y)),
-                Or(is_subnormal(z3FP_to_Float(fpRem(x_z3, y_z3))))
-            )
+            (Float_to_z3FP(rem(x, y)) == fpRem(x_z3, y_z3))
         )
         self.assertTrue(result)
 
@@ -558,15 +575,27 @@ class Operations(unittest.TestCase):
         #print(y)
         self.assertTrue(x==y)
 
+        rm = Up
+        a = FloatVal(0, 4, 0, FloatSort(5,3))
+        b = FloatVal(0, 31, 0, FloatSort(5,3))
+        c = FloatVal(0, 30, 2, FloatSort(5,3))
+        x = simplify(Float_to_z3FP(fma(a, b, c, rm)))
+        y = simplify(fpFMA(rm_to_z3rm(rm), Float_to_z3FP(b), Float_to_z3FP(c), Float_to_z3FP(a)))
+        #print(x)
+        #print(y)
+        self.assertTrue(x==y)
+        result = validate("foo", Float_to_z3FP(fma(a, b, c, rm)) == fpFMA(rm_to_z3rm(rm), Float_to_z3FP(b), Float_to_z3FP(c), Float_to_z3FP(a)))
+        self.assertTrue(result)
 
         for rm in (Truncate, Up, Down, NearestTieToEven, NearestTieAwayFromZero):
-            b = FloatVal(0, 28, 0, FloatSort(5,3))
-            a = FloatVal(0, 29, 0, FloatSort(5,3))
+            a = FloatVal(0, 28, 0, FloatSort(5,3))
+            b = FloatVal(0, 29, 0, FloatSort(5,3))
             c = FloatVal(0, 10, 3, FloatSort(5,3))
             x = simplify(Float_to_z3FP(fma(a, b, c, rm)))
             y = simplify(fpFMA(rm_to_z3rm(rm), Float_to_z3FP(b), Float_to_z3FP(c), Float_to_z3FP(a)))
             print(x)
             print(y)
+            print(rm)
             self.assertTrue(x==y)
 
         #bruteforce: (commented out due to poor performance)
@@ -603,7 +632,7 @@ class Operations(unittest.TestCase):
         x, y, z = FloatConst("x", 5, 3), FloatConst("y", 5, 3), FloatConst("z", 5, 3)
         x_z3, y_z3, z_z3 = Float_to_z3FP(x), Float_to_z3FP(y), Float_to_z3FP(z)
 
-        for rm in (Truncate, Up, Down, NearestTieToEven, NearestTieAwayFromZero):
+        for rm in (Up, Truncate, Down, NearestTieToEven, NearestTieAwayFromZero):
             result = validate("fma",
                 Or(
                     ( Float_to_z3FP(fma(x, y, z, rm)) == fpFMA(rm_to_z3rm(rm), y_z3, z_z3, x_z3) ),

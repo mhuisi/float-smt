@@ -202,12 +202,15 @@ def match_sizes(xs):
     s = zip([x for x, _ in xs], matched_sizes([x for x, _ in xs]), [signed for _, signed in xs])
     return [SignExt(n, x) if signed else ZeroExt(n, x) for x, n, signed in s]
 
+def guaranteed_space(n, added, signed, offset=0):
+    # in order for 2**n + added to not overflow, we need
+    # 2**(n + k) - 2**n > added <=> 2**n*(2**k - 1) > added <=> k > log2(added/2**n + 1)
+    return floor(log2(added/2**n + 1)) + 1 + offset
+
 # function which ensures that value + added cannot overflow
 def guarantee_space(value, added, signed, offset=0):
     n = value.size()-1 if signed else value.size()
-    # in order for value + added to not overflow, we need
-    # 2**(n + k) - 2**n > added <=> 2**n*(2**k - 1) > added <=> k > log2(added/2**n + 1)
-    added_bits = floor(log2(added/2**n + 1)) + 1 + offset
+    added_bits = guaranteed_space(n, added, signed, offset)
     value = SignExt(added_bits, value) if signed else ZeroExt(added_bits, value)
     return value
 
@@ -539,7 +542,8 @@ def div(a : DatatypeRef, b : DatatypeRef, rounding_mode : DatatypeRef = Truncate
 
 def __int_div(a : DatatypeRef, b : DatatypeRef, result_sort : DatatypeSortRef):
     r_m, r_e = sizes(result_sort)
-    
+    a_m, a_e = sizes(get_sort(a))
+
     # first, we calculate a / b with its entire remainder.
     # then, we determine the amount of digits extra_leading_digits that we need to add so that
     # the result is an integer: 
@@ -549,7 +553,7 @@ def __int_div(a : DatatypeRef, b : DatatypeRef, result_sort : DatatypeSortRef):
     # then, we extract the leading digits for the natural number and the remainder, and round the natural number
     # using the remainder. then, we use pack to normalize the result.
     sign, mantissa, exponent = __div_core(a, b)
-
+    old_m = mantissa.size()
     mantissa, exponent = match_sizes([(mantissa, False), (exponent, True)])
     # this is kind of tricky: we want exponent + m to not overflow.
     # if we increase exponent, we need to increase m too (due to match_sizes), hence there's a recursion.
@@ -562,11 +566,12 @@ def __int_div(a : DatatypeRef, b : DatatypeRef, result_sort : DatatypeSortRef):
     mantissa, exponent = match_sizes([(mantissa, False), (exponent, True)])
 
     m, e = mantissa.size(), exponent.size()
-
-    float_remainder_digits = BitVecVal(m - r_m, e)
+    float_leading_digits = a_m + (m - old_m)
+    float_remainder_digits = BitVecVal(m - float_leading_digits, e)
     extra_leading_digits = If(float_remainder_digits < exponent, float_remainder_digits, exponent)
+    exponent = exponent - extra_leading_digits
     # note that this value may be negative.
-    leading_digits = BitVecVal(r_m, e) + extra_leading_digits
+    leading_digits = BitVecVal(float_leading_digits, e) + extra_leading_digits
     remainder_digits = BitVecVal(m, e) - leading_digits
 
     nat = LShR(mantissa, remainder_digits)
@@ -583,32 +588,53 @@ def __int_div(a : DatatypeRef, b : DatatypeRef, result_sort : DatatypeSortRef):
     # this is why we need the internal overflow check: if the nat is suddenly longer than leading_digits,
     # we'd lose the leading 1.
     nat = nat << remainder_digits
-    exponent = exponent + r_m - 1
+    exponent = exponent + leading_digits - 1
 
     # no rounding occurs here since we nullified the remainder.
-    nat = pack(FloatVar(sign, nat, exponent, FloatSort(m, e)), result_sort, RoundNearestTiesToEven)
-
+    nat = pack(FloatVar(sign, nat, exponent, FloatSort(m, e)), result_sort, NearestTieToEven)
     return nat
 
 # Performs the operation a modulo b
 def rem(a : DatatypeRef, b : DatatypeRef) -> DatatypeRef:
     ensure_eq_sort(a, b)
     result_sort = get_sort(a)
-    old_a = a
+    m, e = sizes(result_sort)
+    # we don't want __int_div to overflow. a division a / b may need double the space in the exponent.
+    # if b is a subnormal, we also need enough space for m, hence in the worst case we need to
+    # also guarantee space for 2**(e+1)+m.
+    intermediate_sort = FloatSort(m, e + 1 + guaranteed_space(2**(e+1), m, False))
+    old_a, old_b = a, b
+
+    zero = FloatVar(result_sort.sign(a), BitVecVal(0, m), BitVecVal(0, e), result_sort)
 
     case_a, a = unpack(a)
     case_b, b = unpack(b)
 
-    nat = __int_div(a, b, result_sort)
+    nat = __int_div(a, b, intermediate_sort)
 
-    r = fma(a, neg(b), nat)
+    x = lambda v: print(simplify(Float_to_z3FP(v)))
+    x(nat)
+
+    case_old_a, larger_old_a = unpack(old_a)
+    case_old_b, larger_old_b = unpack(old_b)
+    larger_old_a = pack(larger_old_a, intermediate_sort, case=case_old_a)
+    larger_old_b = pack(larger_old_b, intermediate_sort, case=case_old_b)
+    x(larger_old_a)
+    x(larger_old_b)
+
+    r = fma(larger_old_a, neg(larger_old_b), nat, NearestTieToEven)
+
+    case_r, r = unpack(r)
+    # no rounding should occur here, since the mantissa size does not change.
+    # this line may however handle underflows/overflows.
+    r = pack(r, result_sort, case=case_r)
+
     r = If(Or(case_a == nan_case, 
               case_b == nan_case, 
               case_a == inf_case, 
               case_b == zero_case),
               FloatValNaN(result_sort),
-        If(case_a == zero_case,
-           FloatValZero(result_sort),
+        If(Or(case_a == zero_case, is_zero(r)), zero,
         If(case_b == inf_case, old_a, r)))
     return r
 
