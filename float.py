@@ -636,41 +636,41 @@ def sqrt(a : DatatypeRef, rounding_mode : DatatypeRef = Truncate) -> DatatypeRef
     
     return solution
 
-# Performs the operation a + (b * c)
-def fma(a : DatatypeRef, b : DatatypeRef, c : DatatypeRef, rounding_mode : DatatypeRef = Truncate) -> DatatypeRef:
-    ensure_eq_sort(a, b)
-    ensure_eq_sort(a, c)
-    result_sort = get_sort(a)
-    old_a = a
+# Performs the operation (a * b) + c
+def fma(a, b, c, rounding_mode : DatatypeRef = Truncate) -> DatatypeRef:
+    ensure_eq_sort(c, a)
+    ensure_eq_sort(c, b)
+    result_sort = get_sort(c)
+    old_c = c
 
+    case_c, c = unpack(c)
     case_a, a = unpack(a)
     case_b, b = unpack(b)
-    case_c, c = unpack(c)
 
-    unpack_sort = get_sort(a)
+    unpack_sort = get_sort(c)
     unpack_m, unpack_e = sizes(unpack_sort)
 
     # handle some special cases preemptively so we don't
     # accidentally lose that information during the operation
     # this is for the multiplication only, addition comes below
-    result_case = If(Or(case_b == nan_case, 
-                        case_c == nan_case, 
-                        And(case_b == inf_case, case_c == zero_case), 
-                        And(case_b == zero_case, case_c == inf_case)),
+    result_case = If(Or(case_a == nan_case, 
+                        case_b == nan_case, 
+                        And(case_a == inf_case, case_b == zero_case), 
+                        And(case_a == zero_case, case_b == inf_case)),
                      nan_case,
-                  If(Or(case_b == inf_case, case_c == inf_case), 
+                  If(Or(case_a == inf_case, case_b == inf_case), 
                      inf_case,
-                  If(Or(case_b == zero_case, case_c == zero_case),
+                  If(Or(case_a == zero_case, case_b == zero_case),
                      zero_case,
                      unpacked_normal_case))) # could still be zero or inf instead after the operation (underflow or overflow)
 
-    sign_mul, mantissa_mul, exponent_mul, mul_sort = __mul_core(b, c)
+    sign_mul, mantissa_mul, exponent_mul, mul_sort = __mul_core(a, b)
     mul_result = FloatVar(sign_mul, mantissa_mul, exponent_mul, mul_sort)
     m_mul, e_mul = sizes(mul_sort)
 
     size_dif = mantissa_mul.size() - unpack_m
-    mantissa_a_new = ZeroExt(size_dif, unpack_sort.mantissa(a)) << size_dif #append size_dif many zeros to the right
-    extended_a = FloatVar(unpack_sort.sign(a), mantissa_a_new, unpack_sort.exponent(a), mul_sort)
+    mantissa_c_new = ZeroExt(size_dif, unpack_sort.mantissa(c)) << size_dif #append size_dif many zeros to the right
+    extended_c = FloatVar(unpack_sort.sign(c), mantissa_c_new, unpack_sort.exponent(c), mul_sort)
 
     intermediate_result = pack(mul_result, result_sort, rounding_mode, result_case)
     
@@ -678,11 +678,11 @@ def fma(a : DatatypeRef, b : DatatypeRef, c : DatatypeRef, rounding_mode : Datat
     #resolve troubles due to multiple operations being executed
     mul_sort = FloatSort(m_mul-1, e_mul-2) #-1 due to implicit bit, -2 to get back to original exponent size (revert unpack)
     mul_result = pack(mul_result, mul_sort, Truncate, result_case) #Truncate due to no bits being cut off
-    extended_a = pack(extended_a, mul_sort, Truncate, case_a) #Truncate due to no bits being cut off
+    extended_c = pack(extended_c, mul_sort, Truncate, case_c) #Truncate due to no bits being cut off
 
     # ensure that the first operand is the bigger one
-    x = If(gt(abs(intermediate_result), abs(old_a)), mul_result, extended_a)
-    y = If(gt(abs(intermediate_result), abs(old_a)), extended_a, mul_result)
+    x = If(gt(abs(intermediate_result), abs(old_c)), mul_result, extended_c)
+    y = If(gt(abs(intermediate_result), abs(old_c)), extended_c, mul_result)
 
     extended_result = add(x, y, rounding_mode)
     result_case, result_unpacked = unpack(extended_result)
@@ -695,12 +695,12 @@ def fma(a : DatatypeRef, b : DatatypeRef, c : DatatypeRef, rounding_mode : Datat
         And(
             is_inf(intermediate_result), 
             And(
-                Not(case_b == inf_case),
-                Not(case_c == inf_case)
+                Not(case_a == inf_case),
+                Not(case_b == inf_case)
             ),
-            case_a == inf_case
+            case_c == inf_case
         ),
-        old_a,
+        old_c,
         result
     )
 

@@ -450,7 +450,32 @@ class Operations(unittest.TestCase):
         self.assertTrue(result)
 
     def test_sqrt(self):
-        x = FloatConst("x", 23, 8)
+
+        rm = Truncate
+        a = FloatVal(0, 100, 30, FloatSort(10,5))
+        x = simplify(Float_to_z3FP(sqrt(a, rm)))
+        y = simplify(fpSqrt(rm_to_z3rm(rm), Float_to_z3FP(a)))
+        #print(simplify(z3FP_to_Float(x)))
+        #print(simplify(z3FP_to_Float(y)))
+        #print(x)
+        #print(y)        
+        self.assertTrue(x==y)
+        
+
+        rm = NearestTieToEven
+        a = FloatVal(0, 7, 0, FloatSort(3,2))
+        x = simplify(Float_to_z3FP(sqrt(a, rm)))
+        y = simplify(fpSqrt(rm_to_z3rm(rm), Float_to_z3FP(a)))
+        #print(simplify(z3FP_to_Float(x)))
+        #print(simplify(z3FP_to_Float(y)))
+        print(x)
+        print(y)        
+        self.assertTrue(x==y)
+
+
+
+
+        x = FloatConst("x", 3, 2)
         x_z3 = Float_to_z3FP(x)
 
         for rm in (NearestTieToEven, NearestTieAwayFromZero, Up, Down, Truncate):
@@ -459,112 +484,112 @@ class Operations(unittest.TestCase):
 
     def test_fma(self):
         rm = Truncate
-        a = FloatVal(0, 0, 1, FloatSort(10,5))
+        c = FloatVal(0, 0, 1, FloatSort(10,5))
         b = FloatVal(1, 512, 0, FloatSort(10,5))
-        c = FloatVal(0, 86, 1, FloatSort(10,5))
+        a = FloatVal(0, 86, 1, FloatSort(10,5))
         x = simplify(Float_to_z3FP(fma(a, b, c, rm)))
-        y = simplify(fpFMA(rm_to_z3rm(rm), Float_to_z3FP(b), Float_to_z3FP(c), Float_to_z3FP(a)))
+        y = simplify(fpFMA(rm_to_z3rm(rm), Float_to_z3FP(a), Float_to_z3FP(b), Float_to_z3FP(c)))
         #print(x)
         #print(y)
         self.assertTrue(x==y)
 
 
-        a = FloatVal(0, 424, 10, FloatSort(10,5))
+        c = FloatVal(0, 424, 10, FloatSort(10,5))
         b = FloatVal(0, 900, 16, FloatSort(10,5))
-        c = FloatVal(0, 16, 11, FloatSort(10,5))
+        a = FloatVal(0, 16, 11, FloatSort(10,5))
         x = simplify(Float_to_z3FP(fma(a, b, c, rm)))
-        y = simplify(fpFMA(rm_to_z3rm(rm), Float_to_z3FP(b), Float_to_z3FP(c), Float_to_z3FP(a)))
+        y = simplify(fpFMA(rm_to_z3rm(rm), Float_to_z3FP(a), Float_to_z3FP(b), Float_to_z3FP(c)))
         #print(x)
         #print(y)
         self.assertTrue(x==y)
 
-        a = FloatVal(0, 2, 0, FloatSort(10,5))
+        c = FloatVal(0, 2, 0, FloatSort(10,5))
         b = FloatVal(0, 465, 3, FloatSort(10,5))
-        c = FloatVal(1, 517, 3, FloatSort(10,5))
+        a = FloatVal(1, 517, 3, FloatSort(10,5))
         x = simplify(Float_to_z3FP(fma(a, b, c, rm)))
-        y = simplify(fpFMA(rm_to_z3rm(rm), Float_to_z3FP(b), Float_to_z3FP(c), Float_to_z3FP(a)))
+        y = simplify(fpFMA(rm_to_z3rm(rm), Float_to_z3FP(a), Float_to_z3FP(b), Float_to_z3FP(c)))
         #print(x)
         #print(y)
         self.assertTrue(x==y)
 
         #weird stuff is happening:
-        a = FloatVal(1, 3, 0, FloatSort(2,2))
+        c = FloatVal(1, 3, 0, FloatSort(2,2))
         b = FloatVal(0, 3, 1, FloatSort(2,2))
-        c = FloatVal(0, 1, 1, FloatSort(2,2))
+        a = FloatVal(0, 1, 1, FloatSort(2,2))
         x = simplify(Float_to_z3FP(fma(a, b, c, rm)))
-        y = simplify(fpFMA(rm_to_z3rm(rm), Float_to_z3FP(b), Float_to_z3FP(c), Float_to_z3FP(a)))
+        y = simplify(fpFMA(rm_to_z3rm(rm), Float_to_z3FP(a), Float_to_z3FP(b), Float_to_z3FP(c)))
         #print(x)
         #print(y)
         #self.assertTrue(x==y)
 
-        a = FloatVal(1, 2, 0, FloatSort(3,2))
+        c = FloatVal(1, 2, 0, FloatSort(3,2))
         b = FloatVal(0, 0, 3, FloatSort(3,2))
-        c = FloatVal(0, 0, 3, FloatSort(3,2))
+        a = FloatVal(0, 0, 3, FloatSort(3,2))
         x = simplify(Float_to_z3FP(fma(a, b, c, rm)))
-        y = simplify(fpFMA(rm_to_z3rm(rm), Float_to_z3FP(b), Float_to_z3FP(c), Float_to_z3FP(a)))
+        y = simplify(fpFMA(rm_to_z3rm(rm), Float_to_z3FP(a), Float_to_z3FP(b), Float_to_z3FP(c)))
         #print(x)
         #print(y)
         self.assertTrue(x==y)
 
-        a = FloatVal(1, 28, 7, FloatSort(5,3))
+        c = FloatVal(1, 28, 7, FloatSort(5,3))
         b = FloatVal(0, 9, 1, FloatSort(5,3))
-        c = FloatVal(0, 12, 2, FloatSort(5,3))
+        a = FloatVal(0, 12, 2, FloatSort(5,3))
         x = simplify(Float_to_z3FP(fma(a, b, c, rm)))
-        y = simplify(fpFMA(rm_to_z3rm(rm), Float_to_z3FP(b), Float_to_z3FP(c), Float_to_z3FP(a)))
+        y = simplify(fpFMA(rm_to_z3rm(rm), Float_to_z3FP(a), Float_to_z3FP(b), Float_to_z3FP(c)))
         #print(x)
         #print(y)
         self.assertTrue(x==y)
 
 
         rm = Truncate
-        a = FloatVal(0, 0, 7, FloatSort(5,3))
+        c = FloatVal(0, 0, 7, FloatSort(5,3))
         b = FloatVal(1, 5, 6, FloatSort(5,3))
-        c = FloatVal(0, 26, 6, FloatSort(5,3))
+        a = FloatVal(0, 26, 6, FloatSort(5,3))
         x = simplify(Float_to_z3FP(fma(a, b, c, rm)))
-        y = simplify(fpFMA(rm_to_z3rm(rm), Float_to_z3FP(b), Float_to_z3FP(c), Float_to_z3FP(a)))
+        y = simplify(fpFMA(rm_to_z3rm(rm), Float_to_z3FP(a), Float_to_z3FP(b), Float_to_z3FP(c)))
         #print(x)
         #print(y)
         self.assertTrue(x==y) 
 
 
         rm = Down
-        a = FloatVal(0, 7, 0, FloatSort(3,2))
+        c = FloatVal(0, 7, 0, FloatSort(3,2))
         b = FloatVal(0, 7, 0, FloatSort(3,2))
-        c = FloatVal(1, 0, 1, FloatSort(3,2))
+        a = FloatVal(1, 0, 1, FloatSort(3,2))
         x = simplify(Float_to_z3FP(fma(a, b, c, rm)))
-        y = simplify(fpFMA(rm_to_z3rm(rm), Float_to_z3FP(b), Float_to_z3FP(c), Float_to_z3FP(a)))
+        y = simplify(fpFMA(rm_to_z3rm(rm), Float_to_z3FP(a), Float_to_z3FP(b), Float_to_z3FP(c)))
         #print(x)
         #print(y)
         self.assertTrue(x==y)
 
 
         rm = Down
-        a = FloatVal(0, 7, 0, FloatSort(3,2))
+        c = FloatVal(0, 7, 0, FloatSort(3,2))
         b = FloatVal(0, 7, 0, FloatSort(3,2))
-        c = FloatVal(1, 0, 1, FloatSort(3,2))
+        a = FloatVal(1, 0, 1, FloatSort(3,2))
         x = simplify(Float_to_z3FP(fma(a, b, c, rm)))
-        y = simplify(fpFMA(rm_to_z3rm(rm), Float_to_z3FP(b), Float_to_z3FP(c), Float_to_z3FP(a)))
+        y = simplify(fpFMA(rm_to_z3rm(rm), Float_to_z3FP(a), Float_to_z3FP(b), Float_to_z3FP(c)))
         #print(x)
         #print(y)
         self.assertTrue(x==y)
 
         rm = Up
-        a = FloatVal(0, 25, 0, FloatSort(5,3))
+        c = FloatVal(0, 25, 0, FloatSort(5,3))
         b = FloatVal(1, 13, 0, FloatSort(5,3))
-        c = FloatVal(1, 21, 4, FloatSort(5,3))
+        a = FloatVal(1, 21, 4, FloatSort(5,3))
         x = simplify(Float_to_z3FP(fma(a, b, c, rm)))
-        y = simplify(fpFMA(rm_to_z3rm(rm), Float_to_z3FP(b), Float_to_z3FP(c), Float_to_z3FP(a)))
+        y = simplify(fpFMA(rm_to_z3rm(rm), Float_to_z3FP(a), Float_to_z3FP(b), Float_to_z3FP(c)))
         #print(x)
         #print(y)
         self.assertTrue(x==y)
 
 
         for rm in (Truncate, Up, Down, NearestTieToEven, NearestTieAwayFromZero):
-            b = FloatVal(0, 28, 0, FloatSort(5,3))
-            a = FloatVal(0, 29, 0, FloatSort(5,3))
-            c = FloatVal(0, 10, 3, FloatSort(5,3))
+            b = FloatVal(0, 29, 0, FloatSort(5,3))
+            c = FloatVal(0, 28, 0, FloatSort(5,3))
+            a = FloatVal(0, 10, 3, FloatSort(5,3))
             x = simplify(Float_to_z3FP(fma(a, b, c, rm)))
-            y = simplify(fpFMA(rm_to_z3rm(rm), Float_to_z3FP(b), Float_to_z3FP(c), Float_to_z3FP(a)))
+            y = simplify(fpFMA(rm_to_z3rm(rm), Float_to_z3FP(a), Float_to_z3FP(b), Float_to_z3FP(c)))
             print(x)
             print(y)
             self.assertTrue(x==y)
@@ -574,15 +599,15 @@ class Operations(unittest.TestCase):
         m,e = 3,2
         def statement(vars):
             rm = Down
-            a = FloatVal(vars[0][0], vars[0][1], vars[0][2], FloatSort(m,e))
+            c = FloatVal(vars[0][0], vars[0][1], vars[0][2], FloatSort(m,e))
             b = FloatVal(vars[1][0], vars[1][1], vars[1][2], FloatSort(m,e))
-            c = FloatVal(vars[2][0], vars[2][1], vars[2][2], FloatSort(m,e))
+            a = FloatVal(vars[2][0], vars[2][1], vars[2][2], FloatSort(m,e))
             x = simplify(Float_to_z3FP(fma(a, b, c, rm)))
-            y = simplify(fpFMA(rm_to_z3rm(rm), Float_to_z3FP(b), Float_to_z3FP(c), Float_to_z3FP(a)))
+            y = simplify(fpFMA(rm_to_z3rm(rm), Float_to_z3FP(a), Float_to_z3FP(b), Float_to_z3FP(c)))
             if simplify(x!=y):
                 print(x)
                 print(y)
-            self.assertTrue(x==y or simplify(And(fpIsInf(Float_to_z3FP(fma(a, b, c, rm))), Not(fpIsInf(fpFMA(rm_to_z3rm(rm), Float_to_z3FP(b), Float_to_z3FP(c), Float_to_z3FP(a)))))))
+            self.assertTrue(x==y or simplify(And(fpIsInf(Float_to_z3FP(fma(a, b, c, rm))), Not(fpIsInf(fpFMA(rm_to_z3rm(rm), Float_to_z3FP(a), Float_to_z3FP(b), Float_to_z3FP(c)))))))
 
         variables = (FloatConst("a", m, e), FloatConst("b", m, e), FloatConst("c", m, e))
         bruteforce(variables,statement)
@@ -590,11 +615,11 @@ class Operations(unittest.TestCase):
 
 
         '''z3 messes up the following one
-        a = FloatVal(0, 16, 3, FloatSort(5,3))
+        c = FloatVal(0, 16, 3, FloatSort(5,3))
         b = FloatVal(0, 7, 6, FloatSort(5,3))
-        c = FloatVal(0, 21, 5, FloatSort(5,3))
+        a = FloatVal(0, 21, 5, FloatSort(5,3))
         x = simplify(Float_to_z3FP(fma(a, b, c, rm)))
-        y = simplify(fpFMA(rm_to_z3rm(rm), Float_to_z3FP(b), Float_to_z3FP(c), Float_to_z3FP(a)))
+        y = simplify(fpFMA(rm_to_z3rm(rm), Float_to_z3FP(a), Float_to_z3FP(b), Float_to_z3FP(c)))
         print(x)
         print(y)
         self.assertTrue(x==y)
@@ -607,7 +632,7 @@ class Operations(unittest.TestCase):
             result = validate("fma",
                 Or(
                     ( Float_to_z3FP(fma(x, y, z, rm)) == fpFMA(rm_to_z3rm(rm), y_z3, z_z3, x_z3) ),
-                    And(fpIsInf(Float_to_z3FP(fma(x, y, z, rm))), Not(fpIsInf(fpFMA(rm_to_z3rm(rm), y_z3, z_z3, x_z3)))),
+                    And(fpIsInf(Float_to_z3FP(fma(x, y, z, rm))), Not(fpIsInf(fpFMA(rm_to_z3rm(rm), x_z3, y_z3, z_z3)))),
                 )
             )
             self.assertTrue(result)
