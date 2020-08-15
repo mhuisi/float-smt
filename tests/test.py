@@ -27,31 +27,30 @@ class Float(unittest.TestCase):
     
     def test_precision_conversion(self):
         
-        
-        
         rm = Truncate
         m, e, m_result, e_result = 23,8,  10,5
         a = FloatVal(0, 50, 10, FloatSort(m,e))
         x = simplify(Float_to_z3FP(convert_float(a, FloatSort(m_result, e_result), rm)))
         y = simplify(fpFPToFP(rm_to_z3rm(rm), Float_to_z3FP(a), FPSort(e_result, m_result+1)))
+        print(simplify(Float_to_z3FP(a)), x, y)
         result = simplify(x == y)
         self.assertTrue(result)
-
-
+        
         rm = Up
         m, e, m_result, e_result = 10,5,  3,2
         a = FloatVal(0, 87, 0, FloatSort(m,e))
         x = simplify(Float_to_z3FP(convert_float(a, FloatSort(m_result, e_result), rm)))
         y = simplify(fpFPToFP(rm_to_z3rm(rm), Float_to_z3FP(a), FPSort(e_result, m_result+1)))
+        print(simplify(Float_to_z3FP(a)), x, y)
         result = simplify(x == y)
         self.assertTrue(result)
-
 
         rm = Up
         m, e, m_result, e_result = 10,5,  3,2
         a = FloatVal(0, 192, 3, FloatSort(m,e))
         x = simplify(Float_to_z3FP(convert_float(a, FloatSort(m_result, e_result), rm)))
         y = simplify(fpFPToFP(rm_to_z3rm(rm), Float_to_z3FP(a), FPSort(e_result, m_result+1)))
+        print(simplify(Float_to_z3FP(a)), x, y)
         result = simplify(x == y)
         self.assertTrue(result)
 

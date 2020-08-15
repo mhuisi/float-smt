@@ -299,7 +299,7 @@ def pack(f : DatatypeRef, sort : DatatypeSortRef, rounding_mode : DatatypeRef = 
     added_leading_zeros = -exponent + 1
     added_leading_zeros = If(added_leading_zeros > 0, added_leading_zeros, 0)
     # calculate a sticky bit so that we can retain the remainder bits that we shift out
-    sticky_bit = If(mantissa << (mantissa.size() - added_leading_zeros) == 0, 
+    sticky_bit = If((mantissa & ((1 << added_leading_zeros) - 1)) == 0, 
                     BitVecVal(0, mantissa.size()), 
                     BitVecVal(1, mantissa.size()))
     mantissa = LShR(mantissa, added_leading_zeros)
