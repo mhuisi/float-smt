@@ -591,100 +591,56 @@ def rem(a : DatatypeRef, b : DatatypeRef) -> DatatypeRef:
         If(case_b == inf_case, old_a, r)))
     return r
 
-
-# Performs the square-root operation on a node a
 def sqrt(a : DatatypeRef, rounding_mode : DatatypeRef = Truncate) -> DatatypeRef:
+    # this function is work in progress and not fully correct yet.
     rm_it = NearestTieAwayFromZero
-    t = Truncate
     rm = rounding_mode
 
     old_sort = get_sort(a)
     m_old, e_old = sizes(old_sort)
     
-
     m, e = m_old*2, e_old
-    extended_sort = FloatSort(m, e) #extend for more precision
-    a_extended = convert_float(a, extended_sort, rm)
-
+    extended_sort = FloatSort(m, e) # extend for more precision
+    a_extended = convert_float(a, extended_sort, rounding_mode)
 
     exp = extended_sort.exponent(a_extended)
     man = extended_sort.mantissa(a_extended)
     sig = extended_sort.sign(a_extended)
 
-    two = FloatVal(0,0,2**(e-1),extended_sort)
-    one = FloatVal(0,0,2**(e-1)-1,extended_sort)
-    three = FloatVal(0,2**(m-1),2**(e-1),extended_sort)
-    half = FloatVal(0,0,2**(e-1)-2,extended_sort)
+    two = FloatVal(0, 0, 2**(e-1), extended_sort)
+    one = FloatVal(0, 0, 2**(e-1)-1, extended_sort)
+    half = FloatVal(0, 0, 2**(e-1)-2, extended_sort)
 
     e_bias = BitVecVal(2**(e-1) - 1, e)
 
-    y0 = div(one, FloatVar(sig, man, ((exp - e_bias)/ 2) + e_bias, extended_sort), rm) #initial guess
+    # initial guess
+    y0 = div(one, FloatVar(sig, man, ((exp - e_bias)/ 2) + e_bias, extended_sort), rounding_mode)
     x0 = mul(a_extended, y0)
     h0 = div(y0, two, rm_it)
     
     x = x0
     h = h0
-
     r = fma(neg(x), h, half)
-
-    for i in range(0,int(math.sqrt(m)*2)):
-        
+    for _ in range(0,int(math.sqrt(m)*2)):
         x = fma(x, r, x, Up)
         h = fma(h, r, h, Up)
         r = fma(neg(x), h, half, Up)
-        #print(simplify(Float_to_z3FP(x)))
-        #print(val(extended_sort.mantissa(x)))
-
     solution = x
-    #print("finished with:")
-    #print(simplify(Float_to_z3FP(x)))
-    #print(val(sort.mantissa(x)))
-    #print("____________")
 
-    '''
-    
+    # the first cond shouldn't be necessary for zero, 
+    # but could speed up the cases. 
+    # neg_zero is also specifically pointed out in the standard.
+    solution = If(Or(is_zero(a_extended), is_nan(a_extended), is_pos_inf(a_extended)),
+                  a_extended, # sqrt(-0) = -0 like in the standard, sqrt(nan) = nan, sqrt(+inf)=+inf
+                  If(lt(a_extended, FloatValZero(extended_sort, 1)),
+                     FloatValNaN(extended_sort),
+                     solution))
+    return convert_float(solution, old_sort, rm)
 
-    extended_sort = FloatSort(man.size(), e)
-    two = FloatVal(0,0,2**(e-1),extended_sort)
-    one = FloatVal(0,0,2**(e-1)-1,extended_sort)
-
-    a_extended = FloatVar(sig, man, exp, extended_sort)
-
-    solution = FloatVar(sig, man, ((exp - BitVecVal(2**(e-1) - 1, e))/ 2) + BitVecVal(2**(e-1) - 1, e), extended_sort) #initial guess
-
-    for i in range(0,int(3+math.sqrt(m)+1)):
-        print(simplify(Float_to_z3FP(solution)))
-        print(val(extended_sort.mantissa(solution)))
-
-        solution = div(fma(
-                    a_extended,
-                    div(one,solution,t),
-                    solution,
-                    t
-                ),
-            two,rm)
-        
-        #solution = div((add(solution, div(a,solution,t),t)),two,rm)
-    print("finished: " + str(simplify(Float_to_z3FP(solution))))
-    
-    '''
-
-    
-    #Special cases:
-    solution = If(Or(is_zero(a_extended), is_nan(a_extended), is_pos_inf(a_extended)), #this shouldn't be necessary for zero, but could speed up the cases. neg_zero is also specifically pointed out in the standard
-                    a_extended, # sqrt(-0) = -0 like in the standard, sqrt(nan) = nan, sqrt(+inf)=+inf
-                    If(lt(a_extended, FloatValZero(extended_sort, 1)),
-                        FloatValNaN(extended_sort),
-                        solution
-                    )
-                )
-    
-    
-    solution = convert_float(solution, old_sort, rm)
-    return solution
-
-# Performs the operation (a * b) + c
 def fma(a, b, c, rounding_mode : DatatypeRef = Truncate) -> DatatypeRef:
+    '''
+    Performs the operation (a * b) + c, only rounding at the end of both.
+    '''
     ensure_eq_sort(c, a)
     ensure_eq_sort(c, b)
     result_sort = get_sort(c)
@@ -695,10 +651,10 @@ def fma(a, b, c, rounding_mode : DatatypeRef = Truncate) -> DatatypeRef:
     case_b, b = unpack(b)
 
     unpack_sort = get_sort(c)
-    unpack_m, unpack_e = sizes(unpack_sort)
+    unpack_m, _ = sizes(unpack_sort)
 
     # handle some special cases preemptively so we don't
-    # accidentally lose that information during the operation
+    # accidentally lose that information during the operation.
     # this is for the multiplication only, addition comes below
     result_case = If(Or(case_a == nan_case, 
                         case_b == nan_case, 
@@ -715,17 +671,20 @@ def fma(a, b, c, rounding_mode : DatatypeRef = Truncate) -> DatatypeRef:
     mul_result = FloatVar(sign_mul, mantissa_mul, exponent_mul, mul_sort)
     m_mul, e_mul = sizes(mul_sort)
 
+    # TODO: use convert_float here?
     size_dif = mantissa_mul.size() - unpack_m
-    mantissa_c_new = ZeroExt(size_dif, unpack_sort.mantissa(c)) << size_dif #append size_dif many zeros to the right
+    # append size_dif many zeros to the right
+    mantissa_c_new = ZeroExt(size_dif, unpack_sort.mantissa(c)) << size_dif 
     extended_c = FloatVar(unpack_sort.sign(c), mantissa_c_new, unpack_sort.exponent(c), mul_sort)
 
     intermediate_result = pack(mul_result, result_sort, rounding_mode, result_case)
     
-
-    #resolve troubles due to multiple operations being executed
-    mul_sort = FloatSort(m_mul-1, e_mul-2) #-1 due to implicit bit, -2 to get back to original exponent size (revert unpack)
-    mul_result = pack(mul_result, mul_sort, Truncate, result_case) #Truncate due to no bits being cut off
-    extended_c = pack(extended_c, mul_sort, Truncate, case_c) #Truncate due to no bits being cut off
+    # resolve troubles due to multiple operations being executed
+    # -1 due to implicit bit, -2 to get back to original exponent size (revert unpack)
+    mul_sort = FloatSort(m_mul-1, e_mul-2) 
+    # Truncate due to no bits being cut off
+    mul_result = pack(mul_result, mul_sort, Truncate, result_case) 
+    extended_c = pack(extended_c, mul_sort, Truncate, case_c) 
 
     # ensure that the first operand is the bigger one
     x = If(gt(abs(intermediate_result), abs(old_c)), mul_result, extended_c)
@@ -733,45 +692,36 @@ def fma(a, b, c, rounding_mode : DatatypeRef = Truncate) -> DatatypeRef:
 
     extended_result = add(x, y, rounding_mode)
     result_case, result_unpacked = unpack(extended_result)
-    sign_result = get_sort(result_unpacked).sign(result_unpacked)
-
     result = pack(result_unpacked, result_sort, rounding_mode, result_case)
 
-    #for the rare case that the multiplication overflows and the addition being with the opposite inf
-    result = If(
-        And(
-            is_inf(intermediate_result), 
-            And(
-                Not(case_a == inf_case),
-                Not(case_b == inf_case)
-            ),
-            case_c == inf_case
-        ),
-        old_c,
-        result
-    )
-
+    # for the rare case that the multiplication overflows and the addition being with the opposite inf
+    result = If(And(is_inf(intermediate_result), 
+                    Not(case_a == inf_case),
+                    Not(case_b == inf_case),
+                    case_c == inf_case),
+                old_c,
+                result)
     return result
     
-# Returns a node containing a if a <= b and b else
-def min_float(a : DatatypeRef, b : DatatypeRef, rounding_mode : DatatypeRef = Truncate) -> DatatypeRef:
+def min_float(a : DatatypeRef, b : DatatypeRef) -> DatatypeRef:
     return If(gte(a, b), b, a)
 
-# Returns a node containing a if a >= b and b else
-def max_float(a : DatatypeRef, b : DatatypeRef, rounding_mode : DatatypeRef = Truncate) -> DatatypeRef:
+def max_float(a : DatatypeRef, b : DatatypeRef) -> DatatypeRef:
     return neg(min_float(neg(a), neg(b)))
 
 def Float_to_z3FP(x : DatatypeRef) -> FPRef:
     sort = get_sort(x)
     m,e = sizes(sort)
     x_bv = to_ieee_bv(x)
-    return fpBVToFP(x_bv, FPSort(e, m+1)) #e+1 due to z3 including the sign bit in the mantissa as its a signed bv
+    # m+1 due to z3 including the sign bit in the mantissa as its a signed bv
+    return fpBVToFP(x_bv, FPSort(e, m+1)) 
 
-def z3FP_to_Float(x: FPRef) -> DatatypeRef:
+def z3FP_to_Float(x : FPRef) -> DatatypeRef:
     x_bv = fpToIEEEBV(x)
-    return FloatValBV(x_bv,FloatSort(x.sbits()-1, x.ebits()))#-1 due to z3 including the sign bit in the mantissa as its a signed bv
+    # -1 due to z3 including the sign bit in the mantissa as its a signed bv
+    return FloatValBV(x_bv, FloatSort(x.sbits()-1, x.ebits()))
 
-def rm_to_z3rm(rm: RoundingMode) -> FPRMRef:
+def rm_to_z3rm(rm : RoundingMode) -> FPRMRef:
     switch = {
         NearestTieToEven : RoundNearestTiesToEven(), 
         NearestTieAwayFromZero : RoundNearestTiesToAway(), 
@@ -779,9 +729,9 @@ def rm_to_z3rm(rm: RoundingMode) -> FPRMRef:
         Down : RoundTowardNegative(), 
         Truncate: RoundTowardZero(),
     }
-    return switch.get(rm, -1) #Using -1 as an error return value
+    return switch.get(rm, -1)
 
-def z3rm_to_rm(rm: RoundingMode) -> FPRMRef:
+def z3rm_to_rm(rm : RoundingMode) -> FPRMRef:
     switch = {
         RoundNearestTiesToEven(): NearestTieToEven,
         RoundNearestTiesToAway(): NearestTieAwayFromZero,
@@ -789,10 +739,9 @@ def z3rm_to_rm(rm: RoundingMode) -> FPRMRef:
         RoundTowardNegative(): Down,
         RoundTowardZero(): Truncate,
     }
-    return switch.get(rm, -1) #Using -1 as an error return value
+    return switch.get(rm, -1)
 
-
-def convert_float(a: DatatypeRef, new_sort: DatatypeSortRef, rm: RoundingMode) -> DatatypeRef:
+def convert_float(a : DatatypeRef, new_sort : DatatypeSortRef, rm : RoundingMode) -> DatatypeRef:
     old_sort = get_sort(a)
     case_a, a = unpack(a)
     unpacked_sort = get_sort(a)
@@ -803,7 +752,7 @@ def convert_float(a: DatatypeRef, new_sort: DatatypeSortRef, rm: RoundingMode) -
     size_dif_m = max(m_new - m_old, 0)
     size_dif_e = max(e_new - e_old, 0)
 
-    mantissa_new = ZeroExt(size_dif_m, unpacked_sort.mantissa(a)) << size_dif_m #append size_dif many zeros to the right
+    mantissa_new = ZeroExt(size_dif_m, unpacked_sort.mantissa(a)) << size_dif_m
     exponent_new = SignExt(size_dif_e, unpacked_sort.exponent(a))
     extended_sort = FloatSort(mantissa_new.size(), exponent_new.size())
 
