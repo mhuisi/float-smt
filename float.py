@@ -594,25 +594,93 @@ def rem(a : DatatypeRef, b : DatatypeRef) -> DatatypeRef:
 
 # Performs the square-root operation on a node a
 def sqrt(a : DatatypeRef, rounding_mode : DatatypeRef = Truncate) -> DatatypeRef:
-    sort = get_sort(a)
-    m, e = sizes(sort)
+    rm_it = NearestTieAwayFromZero
+    t = Truncate
+    rm = rounding_mode
 
+    old_sort = get_sort(a)
+    m_old, e_old = sizes(old_sort)
     
-    mantissa_result = 0
-    exponent_result = sort.exponent(a) / 2 #TODO: check if this is true
-    solution = FloatVar(BitVecVal(1,1), mantissa_result, exponent_result, sort)
 
+    m, e = m_old*2, e_old
+    extended_sort = FloatSort(m, e) #extend for more precision
+    a_extended = convert_float(a, extended_sort, rm)
+
+
+    exp = extended_sort.exponent(a_extended)
+    man = extended_sort.mantissa(a_extended)
+    sig = extended_sort.sign(a_extended)
+
+    two = FloatVal(0,0,2**(e-1),extended_sort)
+    one = FloatVal(0,0,2**(e-1)-1,extended_sort)
+    three = FloatVal(0,2**(m-1),2**(e-1),extended_sort)
+    half = FloatVal(0,0,2**(e-1)-2,extended_sort)
+
+    e_bias = BitVecVal(2**(e-1) - 1, e)
+
+    y0 = div(one, FloatVar(sig, man, ((exp - e_bias)/ 2) + e_bias, extended_sort), rm) #initial guess
+    x0 = mul(a_extended, y0)
+    h0 = div(y0, two, rm_it)
+    
+    x = x0
+    h = h0
+
+    r = fma(neg(x), h, half)
+
+    for i in range(0,int(math.sqrt(m)*2)):
+        
+        x = fma(x, r, x, Up)
+        h = fma(h, r, h, Up)
+        r = fma(neg(x), h, half, Up)
+        #print(simplify(Float_to_z3FP(x)))
+        #print(val(extended_sort.mantissa(x)))
+
+    solution = x
+    #print("finished with:")
+    #print(simplify(Float_to_z3FP(x)))
+    #print(val(sort.mantissa(x)))
+    #print("____________")
+
+    '''
+    
+
+    extended_sort = FloatSort(man.size(), e)
+    two = FloatVal(0,0,2**(e-1),extended_sort)
+    one = FloatVal(0,0,2**(e-1)-1,extended_sort)
+
+    a_extended = FloatVar(sig, man, exp, extended_sort)
+
+    solution = FloatVar(sig, man, ((exp - BitVecVal(2**(e-1) - 1, e))/ 2) + BitVecVal(2**(e-1) - 1, e), extended_sort) #initial guess
+
+    for i in range(0,int(3+math.sqrt(m)+1)):
+        print(simplify(Float_to_z3FP(solution)))
+        print(val(extended_sort.mantissa(solution)))
+
+        solution = div(fma(
+                    a_extended,
+                    div(one,solution,t),
+                    solution,
+                    t
+                ),
+            two,rm)
+        
+        #solution = div((add(solution, div(a,solution,t),t)),two,rm)
+    print("finished: " + str(simplify(Float_to_z3FP(solution))))
+    
+    '''
 
     
     #Special cases:
-    solution = If(Or(is_zero(a), is_nan(a), is_pos_inf(a)), #this shouldn't be necessary for zero, but could speed up the cases. neg_zero is also specifically pointed out in the standard
-                    a, # sqrt(-0) = -0 like in the standard, sqrt(nan) = nan, sqrt(+inf)=+inf
-                    If(lt(a, FloatValZero(sort, 1)),
-                        FloatValNaN(sort),
+    solution = If(Or(is_zero(a_extended), is_nan(a_extended), is_pos_inf(a_extended)), #this shouldn't be necessary for zero, but could speed up the cases. neg_zero is also specifically pointed out in the standard
+                    a_extended, # sqrt(-0) = -0 like in the standard, sqrt(nan) = nan, sqrt(+inf)=+inf
+                    If(lt(a_extended, FloatValZero(extended_sort, 1)),
+                        FloatValNaN(extended_sort),
                         solution
                     )
                 )
     
+    
+    solution = convert_float(solution, old_sort, rm)
     return solution
 
 # Performs the operation (a * b) + c
