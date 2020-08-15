@@ -1,5 +1,7 @@
 import unittest
 import itertools
+import cProfile, pstats, io
+from pstats import SortKey
 from float import *
 set_param('parallel.enable', True)
 set_option("parallel.threads.max", 4)
@@ -36,7 +38,16 @@ class Float(unittest.TestCase):
         self.assertTrue(result)
 
 
-        rm = Truncate
+        rm = Up
+        m, e, m_result, e_result = 10,5,  3,2
+        a = FloatVal(0, 87, 0, FloatSort(m,e))
+        x = simplify(Float_to_z3FP(convert_float(a, FloatSort(m_result, e_result), rm)))
+        y = simplify(fpFPToFP(rm_to_z3rm(rm), Float_to_z3FP(a), FPSort(e_result, m_result+1)))
+        result = simplify(x == y)
+        self.assertTrue(result)
+
+
+        rm = Up
         m, e, m_result, e_result = 10,5,  3,2
         a = FloatVal(0, 192, 3, FloatSort(m,e))
         x = simplify(Float_to_z3FP(convert_float(a, FloatSort(m_result, e_result), rm)))
@@ -44,6 +55,17 @@ class Float(unittest.TestCase):
         result = simplify(x == y)
         self.assertTrue(result)
 
+
+        rm = Up
+        m, e, m_result, e_result = 23,8,  10,5
+        a = FloatVal(0, 270468, 0, FloatSort(m,e))
+        x = simplify(Float_to_z3FP(convert_float(a, FloatSort(m_result, e_result), rm)))
+        y = simplify(fpFPToFP(rm_to_z3rm(rm), Float_to_z3FP(a), FPSort(e_result, m_result+1)))
+        result = simplify(x == y)
+        self.assertTrue(result)
+
+
+        
         '''z3 messes this one up:
         rm = Truncate
         m, e, m_result, e_result = 5,3,  3,2
@@ -54,9 +76,9 @@ class Float(unittest.TestCase):
         self.assertTrue(result)
         '''
         
-        
-        for (m,e) in ((3,2), (5,3), (10,5), (23,8), (100,63)):
-            for (m_result, e_result) in ((3,2), (5,3), (10,5), (23,8)):
+        sizes = ((10,5), (23,8), (52,11))
+        for (m,e) in sizes:
+            for (m_result, e_result) in sizes:
                 result_sort = FloatSort(m_result, e_result)
                 result_sort_z3 = FPSort(e_result, m_result+1)
                 x = FloatConst("x", m, e)
@@ -297,8 +319,10 @@ class Operations(unittest.TestCase):
         rm = Truncate
         a = FloatVal(0,7503853,140, FloatSort(23,8))
         b = FloatVal(0,126166,145, FloatSort(23,8))
+
         x = simplify(Float_to_z3FP(add(a, b,rm)))
         y = simplify(fpAdd(rm_to_z3rm(rm), Float_to_z3FP(a), Float_to_z3FP(b)))
+    
         #print(x)
         #print(y)
         self.assertTrue(x==y)
