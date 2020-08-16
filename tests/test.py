@@ -329,10 +329,6 @@ class Operations(unittest.TestCase):
         # half precision
         self.validate_op("add", (10, 5), (add, fpAdd))
 
-    def test_sub(self):
-        # TODO ?
-        pass
-
     def test_mul(self):
         test = lambda rm, a, b, sort: self.assert_float_eq(rm, a, b, sort, (mul, fpMul))
 
