@@ -5,9 +5,9 @@ import utils.utils as utils
 from math import log2, floor
 import math
 
-RoundingMode, (NearestTieToEven, NearestTieAwayFromZero, Up, Down, Truncate) = EnumSort("RoundingMode", [
-    "NearestTieToEven", 
-    "NearestTieAwayFromZero", 
+RoundingMode, (NearestTiesToEven, NearestTiesAwayFromZero, Up, Down, Truncate) = EnumSort("RoundingMode", [
+    "NearestTiesToEven", 
+    "NearestTiesAwayFromZero", 
     "Up", 
     "Down", 
     "Truncate"])
@@ -285,8 +285,8 @@ def round(sign : DatatypeRef, val : DatatypeRef, remainder : DatatypeRef, roundi
     round_truncate = BitVecVal(0, m)
 
     # the 0 case in the following if-else should never occur
-    round_addition = If(rounding_mode == NearestTieToEven, round_nearest_tie_even,
-                     If(rounding_mode == NearestTieAwayFromZero, round_nearest_tie_away_zero,
+    round_addition = If(rounding_mode == NearestTiesToEven, round_nearest_tie_even,
+                     If(rounding_mode == NearestTiesAwayFromZero, round_nearest_tie_away_zero,
                      If(rounding_mode == Up, round_up,
                      If(rounding_mode == Down, round_down, round_truncate))))
     overflow = Not(BVAddNoOverflow(val, round_addition, False))
@@ -543,7 +543,7 @@ def __int_div(a : DatatypeRef, b : DatatypeRef, result_sort : DatatypeSortRef):
     nat = LShR(mantissa, remainder_digits)
     remainder = If(leading_digits < 0, LShR(mantissa, -leading_digits), mantissa << leading_digits)
 
-    nat, round_overflow = round(0, nat, remainder, NearestTieToEven)
+    nat, round_overflow = round(0, nat, remainder, NearestTiesToEven)
     internal_overflow = And(Not(round_overflow), nat == (BitVecVal(1, nat.size()) << leading_digits))
     nat = If(round_overflow, BitVecVal(1 << (nat.size() - 1), nat.size()),
           If(internal_overflow, BitVecVal(1, leading_digits.size()) << (leading_digits - 1), nat))
@@ -557,7 +557,7 @@ def __int_div(a : DatatypeRef, b : DatatypeRef, result_sort : DatatypeSortRef):
     exponent = exponent + leading_digits - 1
 
     # no rounding occurs here since we nullified the remainder
-    nat = pack(FloatVar(sign, nat, exponent, FloatSort(m, e)), result_sort, NearestTieToEven)
+    nat = pack(FloatVar(sign, nat, exponent, FloatSort(m, e)), result_sort, NearestTiesToEven)
     return nat
 
 def rem(a : DatatypeRef, b : DatatypeRef) -> DatatypeRef:
@@ -577,7 +577,7 @@ def rem(a : DatatypeRef, b : DatatypeRef) -> DatatypeRef:
 
     larger_old_a = convert_float(old_a, intermediate_sort, Truncate)
     larger_old_b = convert_float(old_b, intermediate_sort, Truncate)
-    r = fma(neg(larger_old_b), nat, larger_old_a, NearestTieToEven)
+    r = fma(neg(larger_old_b), nat, larger_old_a, NearestTiesToEven)
 
     # no rounding should occur here, since the mantissa size does not change.
     # this line may however handle underflows/overflows.
@@ -594,7 +594,7 @@ def rem(a : DatatypeRef, b : DatatypeRef) -> DatatypeRef:
 
 def sqrt(a : DatatypeRef, rounding_mode : DatatypeRef = Truncate) -> DatatypeRef:
     # this function is work in progress and not fully correct yet.
-    rm_it = NearestTieAwayFromZero
+    rm_it = NearestTiesAwayFromZero
     rm = rounding_mode
 
     old_sort = get_sort(a)
@@ -724,8 +724,8 @@ def z3FP_to_Float(x : FPRef) -> DatatypeRef:
 
 def rm_to_z3rm(rm : RoundingMode) -> FPRMRef:
     switch = {
-        NearestTieToEven : RoundNearestTiesToEven(), 
-        NearestTieAwayFromZero : RoundNearestTiesToAway(), 
+        NearestTiesToEven : RoundNearestTiesToEven(), 
+        NearestTiesAwayFromZero : RoundNearestTiesToAway(), 
         Up : RoundTowardPositive(), 
         Down : RoundTowardNegative(), 
         Truncate: RoundTowardZero(),
@@ -734,8 +734,8 @@ def rm_to_z3rm(rm : RoundingMode) -> FPRMRef:
 
 def z3rm_to_rm(rm : RoundingMode) -> FPRMRef:
     switch = {
-        RoundNearestTiesToEven(): NearestTieToEven,
-        RoundNearestTiesToAway(): NearestTieAwayFromZero,
+        RoundNearestTiesToEven(): NearestTiesToEven,
+        RoundNearestTiesToAway(): NearestTiesAwayFromZero,
         RoundTowardPositive(): Up,
         RoundTowardNegative(): Down,
         RoundTowardZero(): Truncate,

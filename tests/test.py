@@ -57,7 +57,7 @@ class Float(unittest.TestCase):
                 x = FloatConst("x", m, e)
                 x_z3 = Float_to_z3FP(x)
 
-                for rm in (Truncate, Up, Down, NearestTieToEven, NearestTieAwayFromZero):
+                for rm in (Truncate, Up, Down, NearestTiesToEven, NearestTiesAwayFromZero):
                     r = Float_to_z3FP(convert_float(x, result_sort, rm))
                     r_z3 = fpFPToFP(rm_to_z3rm(rm), x_z3, result_sort_z3)
                     result = validate("convert (%d,%d)->(%d,%d) [%s]" % (m, e, m_result, e_result, rm),
@@ -267,7 +267,7 @@ class Operations(unittest.TestCase):
 
         x, y = FloatConst("x", m, e), FloatConst("y", m, e)
         x_z3, y_z3 = Float_to_z3FP(x), Float_to_z3FP(y)
-        for rm in (Truncate, Up, Down, NearestTieToEven, NearestTieAwayFromZero):
+        for rm in (Truncate, Up, Down, NearestTiesToEven, NearestTiesAwayFromZero):
             r = Float_to_z3FP(op(x, y, rm))
             r_z3 = z3_op(rm_to_z3rm(rm), x_z3, y_z3)
             result = validate("%s_(%d,%d)_%s" % (name, m, e, rm), 
@@ -383,14 +383,14 @@ class Operations(unittest.TestCase):
         test(Truncate, (0, 10, 10), (10, 5))
         test(Truncate, (0, 0, 0), (10, 5))
         # this case does not work
-        # test(NearestTieToEven, (0, 7, 0), (3, 2))
+        # test(NearestTiesToEven, (0, 7, 0), (3, 2))
         test(Truncate, (0, 100, 1022), (52, 11))
 
         # validation fails
         m, e = 5, 3
         x = FloatConst("x", m, e)
         x_z3 = Float_to_z3FP(x)
-        for rm in (NearestTieToEven, NearestTieAwayFromZero, Up, Down, Truncate):
+        for rm in (NearestTiesToEven, NearestTiesAwayFromZero, Up, Down, Truncate):
             result = validate("sqrt_(%d, %d)_%s" % (m, e, rm), Float_to_z3FP(sqrt(x, rm)) == fpSqrt(rm_to_z3rm(rm), x_z3))
             self.assertTrue(result)
 
@@ -422,7 +422,7 @@ class Operations(unittest.TestCase):
         # more z3 strangeness.
         # the later validation fails with this example.
         # testing it does not show any errors, though!
-        for rm in (Truncate, Up, Down, NearestTieToEven, NearestTieAwayFromZero):
+        for rm in (Truncate, Up, Down, NearestTiesToEven, NearestTiesAwayFromZero):
             test(rm, (0, 28, 0), (0, 29, 0), (0, 10, 3), (5, 3))
 
         # z3 messes up this example:
@@ -432,7 +432,7 @@ class Operations(unittest.TestCase):
         m, e = 5, 3
         x, y, z = FloatConst("x", m, e), FloatConst("y", m, e), FloatConst("z", m, e)
         x_z3, y_z3, z_z3 = Float_to_z3FP(x), Float_to_z3FP(y), Float_to_z3FP(z)
-        for rm in (Up, Truncate, Down, NearestTieToEven, NearestTieAwayFromZero):
+        for rm in (Up, Truncate, Down, NearestTiesToEven, NearestTiesAwayFromZero):
             r = Float_to_z3FP(fma(x, y, z, rm))
             r_z3 = fpFMA(rm_to_z3rm(rm), y_z3, z_z3, x_z3)
             result = validate("fma_(%d,%d)_%s" % (m, e, rm),
@@ -470,7 +470,7 @@ class Operations(unittest.TestCase):
         m, e = 5, 5
         x = FloatConst("x", m, e)
         case, unpacked = unpack(x)
-        for rm in (Truncate, Up, Down, NearestTieToEven, NearestTieAwayFromZero):
+        for rm in (Truncate, Up, Down, NearestTiesToEven, NearestTiesAwayFromZero):
             packed = pack(unpacked, FloatSort(m, e), rm, case)
             result = validate("pack_inverse_unpack_%s" % rm, Or(And(is_nan(x), is_nan(packed)), eq_bitwise(packed, x)))
             self.assertTrue(result)
