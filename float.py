@@ -49,7 +49,6 @@ def FloatVal(sign : int, mantissa : int, exponent : int, sort : DatatypeSortRef)
     return sort.mk(BitVecVal(sign, 1), BitVecVal(mantissa, m), BitVecVal(exponent, e))
 
 def FloatValDec(dec_val : str, rounding_mode : converter.RoundingMode, sort : DatatypeSortRef) -> DatatypeRef:
-    # TODO: fix this?
     m, e = sizes(sort)
     f = converter.convert(dec_val, rounding_mode, m, e)
     return FloatVal(int(f.s), int(f.m, 2), int(f.e, 2), sort)
