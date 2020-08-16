@@ -1,8 +1,8 @@
 from __future__ import annotations
 import floatsmt
-from floatsmt import *
+from floatsmt.operations import *
 
-rm = Truncate #default value
+rm = Truncate # default value
 
 def set_default_rm(rounding_mode: RoundingMode):
     global rm
