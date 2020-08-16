@@ -32,7 +32,17 @@ def FloatConst(name : str, mantissa_size : int, exponent_size : int) -> Datatype
 
 def FloatVar(sign : BitVecRef, mantissa : BitVecRef, exponent : BitVecRef, sort : DatatypeSortRef) -> DatatypeRef:
     return sort.mk(sign, mantissa, exponent)
-# TODO: create more Var constructors to mirror the val constructors
+
+def FloatVarBV(bv : BitVecRef, sort : DatatypeSortRef) -> DatatypeRef:
+    m, e = sizes(sort)
+    sign = Extract(m+e, m+e, bv)
+    mantissa = Extract(m-1, 0, bv)
+    exponent = Extract(m+e-1, m, bv)
+    return FloatVar(sign, mantissa, exponent, sort)
+
+def FloatVarZero(sort : DatatypeSortRef, sign = BitVecVal(0, 1)) -> DatatypeRef:
+    m, e = sizes(sort)
+    return FloatVar(sign, BitVecVal(0, m), BitVecVal(0, e), sort)
 
 def FloatVal(sign : int, mantissa : int, exponent : int, sort : DatatypeSortRef) -> DatatypeRef:
     m, e = sizes(sort)
@@ -43,14 +53,6 @@ def FloatValDec(dec_val : str, rounding_mode : converter.RoundingMode, sort : Da
     m, e = sizes(sort)
     f = converter.convert(dec_val, rounding_mode, m, e)
     return FloatVal(int(f.s), int(f.m, 2), int(f.e, 2), sort)
-
-# TODO: rename?
-def FloatValBV(bv : BitVecRef, sort : DatatypeSortRef) -> DatatypeRef:
-    m, e = sizes(sort)
-    sign = Extract(m+e, m+e, bv)
-    mantissa = Extract(m-1, 0, bv)
-    exponent = Extract(m+e-1, m, bv)
-    return FloatVar(sign, mantissa, exponent, sort)
 
 def FloatValPosInf(sort : DatatypeSortRef) -> DatatypeRef:
     _, e = sizes(sort)
@@ -64,7 +66,6 @@ def FloatValNaN(sort : DatatypeSortRef, value = 1) -> DatatypeRef:
     if value == 0:
         raise ValueError("NaN value cannot be zero")
     _, e = sizes(sort)
-    # TODO: this is weird
     sign = int(value >= 0)
     return FloatVal(sign, value, 2**e - 1, sort)
 
@@ -569,7 +570,6 @@ def rem(a : DatatypeRef, b : DatatypeRef) -> DatatypeRef:
     # also guarantee space for 2**(e+1)+m.
     intermediate_sort = FloatSort(m, e + 1 + guaranteed_space(2**(e+1), m, False))
     old_a, old_b = a, b
-    zero = FloatVar(result_sort.sign(a), BitVecVal(0, m), BitVecVal(0, e), result_sort)
 
     case_a, a = unpack(a)
     case_b, b = unpack(b)
@@ -588,7 +588,7 @@ def rem(a : DatatypeRef, b : DatatypeRef) -> DatatypeRef:
               case_a == inf_case, 
               case_b == zero_case),
               FloatValNaN(result_sort),
-        If(Or(case_a == zero_case, is_zero(r)), zero,
+        If(Or(case_a == zero_case, is_zero(r)), FloatVarZero(result_sort, result_sort.sign(old_a)),
         If(case_b == inf_case, old_a, r)))
     return r
 
@@ -720,7 +720,7 @@ def Float_to_z3FP(x : DatatypeRef) -> FPRef:
 def z3FP_to_Float(x : FPRef) -> DatatypeRef:
     x_bv = fpToIEEEBV(x)
     # -1 due to z3 including the sign bit in the mantissa as its a signed bv
-    return FloatValBV(x_bv, FloatSort(x.sbits()-1, x.ebits()))
+    return FloatVarBV(x_bv, FloatSort(x.sbits()-1, x.ebits()))
 
 def rm_to_z3rm(rm : RoundingMode) -> FPRMRef:
     switch = {
