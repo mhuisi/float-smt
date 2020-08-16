@@ -1,8 +1,9 @@
+from z3 import *
 import unittest
 import itertools
 import cProfile, pstats, io
 from pstats import SortKey
-from float import *
+from floatsmt import *
 
 set_param('parallel.enable', True)
 set_option("parallel.threads.max", 4)
