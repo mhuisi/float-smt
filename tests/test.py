@@ -3,8 +3,20 @@ import itertools
 import cProfile, pstats, io
 from pstats import SortKey
 from float import *
+
 set_param('parallel.enable', True)
 set_option("parallel.threads.max", 4)
+
+def validate(s, statement):
+    solver = Solver()
+    set_param("parallel.enable", True)
+    set_param("parallel.threads.max", 4)
+    solver.add(Not(statement))
+    print("\nstarting validation of %s" % s)
+    result = solver.check()
+    if(result == sat):
+        print(solver.model())
+    return result == unsat
 
 class Float(unittest.TestCase):
     def test_float_field_sizes(self):
@@ -14,66 +26,31 @@ class Float(unittest.TestCase):
         self.assertEqual(exponent_size, sizes(sort)[1])
 
     def test_conversions_to_Z3(self):
-        x,y = FloatConst("x", 23, 8), FloatConst("y", 23, 8)
+        x = FloatConst("x", 23, 8)
         result = validate("z3_conv",
-            Or(
-                eq_bitwise(
-                    z3FP_to_Float(Float_to_z3FP(x)),
-                    x),
-                is_nan(x)
-            )
-        )
+            Or(eq_bitwise(z3FP_to_Float(Float_to_z3FP(x)), x),
+               is_nan(x)))
         self.assertTrue(result)
-    
+
     def test_precision_conversion(self):
+        def test(rm, x, src_sort, dest_sort):
+            sign, mantissa, exponent = x
+            m_s, e_s = src_sort
+            m_d, e_d = dest_sort
+            x = FloatVal(sign, mantissa, exponent, FloatSort(m_s, e_s))
+            a = simplify(Float_to_z3FP(convert_float(x, FloatSort(m_d, e_d), rm)))
+            b = simplify(fpFPToFP(rm_to_z3rm(rm), Float_to_z3FP(x), FPSort(e_d, m_d+1)))
+            self.assertTrue(simplify(a == b))
+
+        test(Truncate, (0, 50, 10), (23, 8), (10, 5))
+        test(Up, (0, 87, 0), (10, 5), (3, 2))
+        test(Up, (0, 192, 3), (10, 5), (3, 2))
+        test(Up, (0, 270468, 0), (23, 8), (10, 5))
+        # z3 messes this one up:
+        # test(Truncate, (1, 9, 5), (5, 3), (3, 2))
         
-        rm = Truncate
-        m, e, m_result, e_result = 23,8,  10,5
-        a = FloatVal(0, 50, 10, FloatSort(m,e))
-        x = simplify(Float_to_z3FP(convert_float(a, FloatSort(m_result, e_result), rm)))
-        y = simplify(fpFPToFP(rm_to_z3rm(rm), Float_to_z3FP(a), FPSort(e_result, m_result+1)))
-        result = simplify(x == y)
-        self.assertTrue(result)
-        
-        rm = Up
-        m, e, m_result, e_result = 10,5,  3,2
-        a = FloatVal(0, 87, 0, FloatSort(m,e))
-        x = simplify(Float_to_z3FP(convert_float(a, FloatSort(m_result, e_result), rm)))
-        y = simplify(fpFPToFP(rm_to_z3rm(rm), Float_to_z3FP(a), FPSort(e_result, m_result+1)))
-        result = simplify(x == y)
-        self.assertTrue(result)
-
-        rm = Up
-        m, e, m_result, e_result = 10,5,  3,2
-        a = FloatVal(0, 192, 3, FloatSort(m,e))
-        x = simplify(Float_to_z3FP(convert_float(a, FloatSort(m_result, e_result), rm)))
-        y = simplify(fpFPToFP(rm_to_z3rm(rm), Float_to_z3FP(a), FPSort(e_result, m_result+1)))
-        result = simplify(x == y)
-        self.assertTrue(result)
-
-
-        rm = Up
-        m, e, m_result, e_result = 23,8,  10,5
-        a = FloatVal(0, 270468, 0, FloatSort(m,e))
-        x = simplify(Float_to_z3FP(convert_float(a, FloatSort(m_result, e_result), rm)))
-        y = simplify(fpFPToFP(rm_to_z3rm(rm), Float_to_z3FP(a), FPSort(e_result, m_result+1)))
-        result = simplify(x == y)
-        self.assertTrue(result)
-
-
-        
-        '''z3 messes this one up:
-        rm = Truncate
-        m, e, m_result, e_result = 5,3,  3,2
-        a = FloatVal(1, 9, 5, FloatSort(m,e))
-        x = simplify(Float_to_z3FP(convert_float(a, FloatSort(m_result, e_result), rm)))
-        y = simplify(fpFPToFP(rm_to_z3rm(rm), Float_to_z3FP(a), FPSort(e_result, m_result+1)))
-        result = simplify(x == y)
-        self.assertTrue(result)
-        '''
-        
-        sizes = ((10,5), (23,8), (52,11))
-        for (m,e) in sizes:
+        sizes = ((10, 5), (23, 8), (52, 11))
+        for (m, e) in sizes:
             for (m_result, e_result) in sizes:
                 result_sort = FloatSort(m_result, e_result)
                 result_sort_z3 = FPSort(e_result, m_result+1)
@@ -81,13 +58,11 @@ class Float(unittest.TestCase):
                 x_z3 = Float_to_z3FP(x)
 
                 for rm in (Truncate, Up, Down, NearestTieToEven, NearestTieAwayFromZero):
-                    result = validate("conversion " + str((m,e)) + "->" + str((m_result,e_result)) + " " + str(rm),
-                            Or(( Float_to_z3FP(convert_float(x, result_sort, rm)) == fpFPToFP(rm_to_z3rm(rm), x_z3, result_sort_z3) ),
-                                (And(fpIsInf(Float_to_z3FP(convert_float(x, result_sort, rm))), Not(fpIsInf(fpFPToFP(rm_to_z3rm(rm), x_z3, result_sort_z3))))))
-                    )
+                    r = Float_to_z3FP(convert_float(x, result_sort, rm))
+                    r_z3 = fpFPToFP(rm_to_z3rm(rm), x_z3, result_sort_z3)
+                    result = validate("convert (%d,%d)->(%d,%d) [%s]" % (m, e, m_result, e_result, rm),
+                                      Or(r == r_z3, And(fpIsInf(r), Not(fpIsInf(r_z3)))))
                     self.assertTrue(result)
-
-        
 
 class is_functions(unittest.TestCase):
     __mantissa_size, __exponent_size = 2, 3
@@ -109,9 +84,6 @@ class is_functions(unittest.TestCase):
         self.assertFalse(simplify(predicate_expr))
 
     def test_is_pos_zero(self):
-        z = If(BitVecVal(1,1) == BitVecVal(0,1), self.__normal, self.__pos_zero)
-        self.true(is_pos_zero(z)) #To test if it works with conditions too
-
         self.true(is_pos_zero(self.__pos_zero))
         self.false(is_pos_zero(self.__neg_zero))
         self.false(is_pos_zero(self.__not_zero))
@@ -119,6 +91,9 @@ class is_functions(unittest.TestCase):
         self.false(is_pos_zero(self.__neg_inf))
         self.false(is_pos_zero(self.__subnormal))
         self.false(is_pos_zero(self.__nan1))
+
+        z = If(BitVecVal(1, 1) == BitVecVal(0, 1), self.__normal, self.__pos_zero)
+        self.true(is_pos_zero(z))
 
     def test_is_neg_zero(self):
         self.true(is_neg_zero(self.__neg_zero))
@@ -246,12 +221,7 @@ class ComparisonOps(unittest.TestCase):
         
         x,y = FloatConst("x", 23, 8), FloatConst("y", 23, 8)
         x_z3, y_z3 = Float_to_z3FP(x), Float_to_z3FP(y)
-
-        result = validate("gt", Or(
-                                (gt(x, y) == fpGT(x_z3, y_z3)), 
-                                Or(is_nan(x), is_nan(y))
-                            )
-                        )
+        result = validate("gt", Or(gt(x, y) == fpGT(x_z3, y_z3), is_nan(x), is_nan(y)))
         self.assertTrue(result)
 
 class Operations(unittest.TestCase):
@@ -277,6 +247,32 @@ class Operations(unittest.TestCase):
 
     def false(self, predicate_expr):
         self.assertFalse(simplify(predicate_expr))
+
+    def assert_float_eq(self, rm, a, b, sort, ops):
+        sign_a, mantissa_a, exponent_a = a
+        sign_b, mantissa_b, exponent_b = b
+        m, e = sort
+        op, z3_op = ops
+
+        sort = FloatSort(m, e)
+        a = FloatVal(sign_a, mantissa_a, exponent_a, sort)
+        b = FloatVal(sign_b, mantissa_b, exponent_b, sort)
+        x = simplify(Float_to_z3FP(op(a, b, rm)))
+        y = simplify(z3_op(rm_to_z3rm(rm), Float_to_z3FP(a), Float_to_z3FP(b)))
+        self.assertTrue(x == y)
+
+    def validate_op(self, name, sort, ops):
+        m, e = sort
+        op, z3_op = ops
+
+        x, y = FloatConst("x", m, e), FloatConst("y", m, e)
+        x_z3, y_z3 = Float_to_z3FP(x), Float_to_z3FP(y)
+        for rm in (Truncate, Up, Down, NearestTieToEven, NearestTieAwayFromZero):
+            r = Float_to_z3FP(op(x, y, rm))
+            r_z3 = z3_op(rm_to_z3rm(rm), x_z3, y_z3)
+            result = validate("%s_(%d,%d)_%s" % (name, m, e, rm), 
+                              Or(r == r_z3, And(fpIsInf(r), Not(fpIsInf(r_z3)))))
+            self.assertTrue(result)
 
     def test_abs(self):
         self.true(gte(abs(self.__subnormal1), self.__pos_zero))
@@ -311,569 +307,173 @@ class Operations(unittest.TestCase):
         self.false(eq_float(neg(self.__normal2), self.__normal2))
 
     def test_add(self):
-        
-        rm = Truncate
-        a = FloatVal(0,7503853,140, FloatSort(23,8))
-        b = FloatVal(0,126166,145, FloatSort(23,8))
+        test = lambda rm, a, b, sort: self.assert_float_eq(rm, a, b, sort, (add, fpAdd))
 
-        x = simplify(Float_to_z3FP(add(a, b,rm)))
-        y = simplify(fpAdd(rm_to_z3rm(rm), Float_to_z3FP(a), Float_to_z3FP(b)))
-    
-        #print(x)
-        #print(y)
-        self.assertTrue(x==y)
+        test(Truncate, (0, 7503853, 140), (0, 126166, 145), (23, 8))
+        test(Truncate, (0, 7503853, 70), (1, 126166, 70), (23, 8))
+        test(Truncate, (0, 7503853, 140), (1, 126166, 70), (23, 8))
+        test(Truncate, (0, 585, 21), (1, 64, 21), (10, 5))
+        test(Truncate, (0, 1023, 21), (0, 1023, 21), (10, 5))
+        test(Truncate, (1, 1, 0), (0, 0, 31), (10, 5))
+        test(Truncate, (0, 32, 0), (0, 5, 4), (10, 5))
+        test(Truncate, (1, 4, 15), (0, 4, 15), (10, 5))
+        test(Truncate, (0, 4, 15), (1, 4, 15), (10, 5))
+        test(Truncate, (0, 0, 0), (1, 0, 0), (10, 5))
+        # z3 messes up this example:
+        # test(Truncate, (0, 0, 30), (0, 0, 30), (10, 5))
 
-        a = FloatVal(0,7503853,70, FloatSort(23,8))
-        b = FloatVal(1,126166,70, FloatSort(23,8))
-        x = simplify(Float_to_z3FP(add(a, b,rm)))
-        y = simplify(fpAdd(rm_to_z3rm(rm), Float_to_z3FP(a), Float_to_z3FP(b)))
-        #print(x)
-        #print(y)
-        self.assertTrue(x==y)
+        # very small floats
+        self.validate_op("add", (3, 2), (add, fpAdd))
 
-        a = FloatVal(0,7503853,140, FloatSort(23,8))
-        b = FloatVal(1,126166,70, FloatSort(23,8))
-        x = simplify(Float_to_z3FP(add(a, b,rm)))
-        y = simplify(fpAdd(rm_to_z3rm(rm), Float_to_z3FP(a), Float_to_z3FP(b)))
-        self.assertTrue(x==y)
-
-        
-
-        #-----------------------------------------------------
-
-        a = FloatVal(0,585,21, FloatSort(10,5))
-        b = FloatVal(1,64,21, FloatSort(10,5))
-        x = simplify(Float_to_z3FP(add(a, b,rm)))
-        y = simplify(fpAdd(rm_to_z3rm(rm), Float_to_z3FP(a), Float_to_z3FP(b)))
-        #print(x)
-        #print(y)
-        self.assertTrue(x==y)
-
-
-        a = FloatVal(0,1023,21, FloatSort(10,5))
-        b = FloatVal(0,1023,21, FloatSort(10,5))
-        x = simplify(Float_to_z3FP(add(a, b,rm)))
-        y = simplify(fpAdd(rm_to_z3rm(rm), Float_to_z3FP(a), Float_to_z3FP(b)))
-        #print(x)
-        #print(y)
-        self.assertTrue(x==y)
-
-        a = FloatVal(1,1,0, FloatSort(10,5))
-        b = FloatVal(0,0,31, FloatSort(10,5))
-        x = simplify(Float_to_z3FP(add(a, b,rm)))
-        y = simplify(fpAdd(rm_to_z3rm(rm), Float_to_z3FP(a), Float_to_z3FP(b)))
-        #print(x)
-        #print(y)
-        self.assertTrue(x==y)
-
-
-        a = FloatVal(0,32,0, FloatSort(10,5))
-        b = FloatVal(0,5,4, FloatSort(10,5))
-        x = simplify(Float_to_z3FP(add(a, b,rm)))
-        y = simplify(fpAdd(rm_to_z3rm(rm), Float_to_z3FP(a), Float_to_z3FP(b)))
-        #print(x)
-        #print(y)
-        self.assertTrue(x==y)
-
-
-        a = FloatVal(1,4,15, FloatSort(10,5))
-        b = FloatVal(0,4,15, FloatSort(10,5))
-        x = simplify(Float_to_z3FP(add(a, b,rm)))
-        y = simplify(fpAdd(rm_to_z3rm(rm), Float_to_z3FP(a), Float_to_z3FP(b)))
-        #print(x)
-        #print(y)
-        self.assertTrue(x==y)
-
-        a = FloatVal(0,4,15, FloatSort(10,5))
-        b = FloatVal(1,4,15, FloatSort(10,5))
-        x = simplify(Float_to_z3FP(add(a, b,rm)))
-        y = simplify(fpAdd(rm_to_z3rm(rm), Float_to_z3FP(a), Float_to_z3FP(b)))
-        #print(x)
-        #print(y)
-        self.assertTrue(x==y)
-
-        a = FloatVal(0,0,0, FloatSort(10,5))
-        b = FloatVal(1,0,0, FloatSort(10,5))
-        x = simplify(Float_to_z3FP(add(a, b,rm)))
-        y = simplify(fpAdd(rm_to_z3rm(rm), Float_to_z3FP(a), Float_to_z3FP(b)))
-        #print(x)
-        #print(y)
-        self.assertTrue(x==y)
-
-        '''
-        z3 messes up this example:
-        rm = Truncate
-        a = FloatVal(0,0,30, FloatSort(10,5))
-        b = FloatVal(0,0,30, FloatSort(10,5))
-        x = simplify(Float_to_z3FP(add(a, b,rm)))
-        y = simplify(fpAdd(rm_to_z3rm(rm), Float_to_z3FP(a), Float_to_z3FP(b)))
-        print(x)
-        print(y)
-        self.assertTrue(x==y)
-        '''
-
-        #very small floats
-        x, y = FloatConst("x", 3, 2), FloatConst("y", 3, 2)
-        x_z3, y_z3 = Float_to_z3FP(x), Float_to_z3FP(y)
-
-        for rm in (Truncate, Up, Down, NearestTieToEven, NearestTieAwayFromZero):
-            result = validate("add",
-                Or(
-                    ( Float_to_z3FP(add(x, y, rm)) == fpAdd(rm_to_z3rm(rm), x_z3, y_z3) ),
-                    And(fpIsInf(Float_to_z3FP(add(x, y, rm))), Not(fpIsInf(fpAdd(rm_to_z3rm(rm), x_z3, y_z3)))),
-                )
-            )
-            self.assertTrue(result)
-            print("Rounding mode " + str(rm) + " ok")
-
-
-        #half precision
-        x, y = FloatConst("x", 10, 5), FloatConst("y", 10, 5)
-        x_z3, y_z3 = Float_to_z3FP(x), Float_to_z3FP(y)
-
-        for rm in (Truncate, Up, Down, NearestTieToEven, NearestTieAwayFromZero):
-            result = validate("add",
-                Or(
-                    ( Float_to_z3FP(add(x, y, rm)) == fpAdd(rm_to_z3rm(rm), x_z3, y_z3) ),
-                    And(fpIsInf(Float_to_z3FP(add(x, y, rm))), Not(fpIsInf(fpAdd(rm_to_z3rm(rm), x_z3, y_z3)))),
-                )
-            )
-            self.assertTrue(result)
-            print("Rounding mode " + str(rm) + " ok")
+        # half precision
+        self.validate_op("add", (10, 5), (add, fpAdd))
 
     def test_sub(self):
+        # TODO ?
         pass
 
     def test_mul(self):
-        '''
-        z3 messes up this example:
-        rm = Truncate
-        a = FloatVal(0,0,16, FloatSort(10,5))
-        b = FloatVal(0,0,30, FloatSort(10,5))
-        x = simplify(Float_to_z3FP(mul(a, b,rm)))
-        y = simplify(fpMul(rm_to_z3rm(rm), Float_to_z3FP(a), Float_to_z3FP(b)))
-        print(x)
-        print(y)
-        self.assertTrue(x==y)
-        '''
-        rm = Truncate
-        a = FloatVal(0,136,2, FloatSort(10,5))
-        b = FloatVal(0,1009,1, FloatSort(10,5))
-        x = simplify(Float_to_z3FP(mul(a, b,rm)))
-        y = simplify(fpMul(rm_to_z3rm(rm), Float_to_z3FP(a), Float_to_z3FP(b)))
-        print(x)
-        print(y)
-        self.assertTrue(x==y)
+        test = lambda rm, a, b, sort: self.assert_float_eq(rm, a, b, sort, (mul, fpMul))
 
+        test(Truncate, (0, 136, 2), (0, 1009, 1), (10, 5))
+        test(Truncate, (0, 136, 2), (0, 1009, 1), (10, 5))
+        # z3 messes up this example:
+        # test(Truncate, (0, 0, 16), (0, 0, 30), (10, 5))
 
-
-        rm = Truncate
-        a = FloatVal(0,136,2, FloatSort(10,5))
-        b = FloatVal(0,1009,1, FloatSort(10,5))
-        x = simplify(Float_to_z3FP(mul(a, b,rm)))
-        y = simplify(fpMul(rm_to_z3rm(rm), Float_to_z3FP(a), Float_to_z3FP(b)))
-        self.assertTrue(x==y)
-
-        x, y = FloatConst("x", 10, 5), FloatConst("y", 10, 5)
-        x_z3, y_z3 = Float_to_z3FP(x), Float_to_z3FP(y)
-
-        for rm in (Up, Down, Truncate, NearestTieToEven, NearestTieAwayFromZero):
-            result = validate("mul_%s" % rm,
-                              Or(Float_to_z3FP(mul(x, y, rm)) == fpMul(rm_to_z3rm(rm), x_z3, y_z3),
-                              And(fpIsInf(Float_to_z3FP(mul(x, y, rm))), Not(fpIsInf(fpMul(rm_to_z3rm(rm), x_z3, y_z3))))))
-            self.assertTrue(result)
+        self.validate_op("mul", (10, 5), (mul, fpMul))
 
     def test_div(self):
-        '''
-        z3 messes up this example:
-        rm = Truncate
-        a = FloatVal(0,0,24, FloatSort(10,5))
-        b = FloatVal(0,0,7, FloatSort(10,5))
-        print(simplify(Float_to_z3FP(a)), simplify(Float_to_z3FP(b)))
-        x = simplify(Float_to_z3FP(div(a, b,rm)))
-        y = simplify(fpDiv(rm_to_z3rm(rm), Float_to_z3FP(a), Float_to_z3FP(b)))
-        print(x, y)
-        self.assertTrue(x==y)
-        '''  
-        x, y = FloatConst("x", 10, 5), FloatConst("y", 10, 5)
-        x_z3, y_z3 = Float_to_z3FP(x), Float_to_z3FP(y)
+        # z3 messes up this example:
+        # self.assert_float_eq(Truncate, (0, 0, 24), (0, 0, 7), (10, 5), (div, fpDiv))
 
-        for rm in (Up, Down, Truncate, NearestTieToEven, NearestTieAwayFromZero):
-            result = validate("div_%s" % rm,
-                Or(Float_to_z3FP(div(x, y, rm)) == fpDiv(rm_to_z3rm(rm), x_z3, y_z3),
-                   And(fpIsInf(Float_to_z3FP(div(x, y, rm))), Not(fpIsInf(fpDiv(rm_to_z3rm(rm), x_z3, y_z3))))))
-            self.assertTrue(result)
+        self.validate_op("div", (10, 5), (div, fpDiv))
 
     def test_rem(self):
-        '''
-        a = FloatVal(1,1,1, FloatSort(5,3))
-        b = FloatVal(1,3,0, FloatSort(5,3))
-        x = simplify(Float_to_z3FP(rem(a, b)))
-        y = simplify(fpRem(Float_to_z3FP(a), Float_to_z3FP(b)))
-        self.assertTrue(x==y)
+        def test(a, b):
+            sign_a, mantissa_a, exponent_a = a
+            sign_b, mantissa_b, exponent_b = b
+            sort = FloatSort(5, 3)
+            a = FloatVal(sign_a, mantissa_a, exponent_a, sort)
+            b = FloatVal(sign_b, mantissa_b, exponent_b, sort)
+            x = simplify(Float_to_z3FP(rem(a, b)))
+            y = simplify(fpRem(Float_to_z3FP(a), Float_to_z3FP(b)))
+            self.assertTrue(x == y)
+        test((1, 1, 1), (1, 3, 0))
+        test((0, 13, 2), (1, 15, 0))
+        test((1, 8, 6), (0, 4, 0))
 
-        a = FloatVal(0,13,2, FloatSort(5,3))
-        b = FloatVal(1,15,0, FloatSort(5,3))
-        x = simplify(Float_to_z3FP(rem(a, b)))
-        y = simplify(fpRem(Float_to_z3FP(a), Float_to_z3FP(b)))
-        self.assertTrue(x==y)
-        '''
-
-        a = FloatVal(1,8,6, FloatSort(5,3))
-        b = FloatVal(0,4,0, FloatSort(5,3))
-        print(simplify(Float_to_z3FP(a)), simplify(Float_to_z3FP(b)))
-        x = simplify(Float_to_z3FP(rem(a, b)))
-        y = simplify(fpRem(Float_to_z3FP(a), Float_to_z3FP(b)))
-        print(x, y)
-        self.assertTrue(x==y)
-
-        x, y = FloatConst("x", 5, 3), FloatConst("y", 5, 3)
+        m, e = 5, 3
+        x, y = FloatConst("x", m, e), FloatConst("y", m, e)
         x_z3, y_z3 = Float_to_z3FP(x), Float_to_z3FP(y)
-        result = validate("rem",
-            (Float_to_z3FP(rem(x, y)) == fpRem(x_z3, y_z3))
-        )
+        result = validate("rem_(%d,%d)" % (m, e), Float_to_z3FP(rem(x, y)) == fpRem(x_z3, y_z3))
         self.assertTrue(result)
 
     def test_sqrt(self):
+        def test(rm, a, sort):
+            sign_a, mantissa_a, exponent_a = a
+            m, e = sort
+            sort = FloatSort(m, e)
+            a = FloatVal(sign_a, mantissa_a, exponent_a, sort)
+            x = simplify(Float_to_z3FP(sqrt(a, rm)))
+            y = simplify(fpSqrt(rm_to_z3rm(rm), Float_to_z3FP(a)))
+            self.assertTrue(x == y)
 
-        
+        test(Truncate, (0, 100, 10), (10, 5))
+        test(Truncate, (0, 100, 30), (10, 5))
+        test(Truncate, (0, 10, 10), (10, 5))
+        test(Truncate, (0, 0, 0), (10, 5))
+        # this case does not work
+        # test(NearestTieToEven, (0, 7, 0), (3, 2))
+        test(Truncate, (0, 100, 1022), (52, 11))
 
-
-        rm = Truncate
-        a = FloatVal(0, 100, 0, FloatSort(10,5))
-        x = simplify(Float_to_z3FP(sqrt(a, rm)))
-        y = simplify(fpSqrt(rm_to_z3rm(rm), Float_to_z3FP(a)))
-        #print(simplify(z3FP_to_Float(x)))
-        #print(simplify(z3FP_to_Float(y)))
-        print(x)
-        print(y)        
-        self.assertTrue(x==y)
-
-
-        rm = Truncate
-        a = FloatVal(0, 100, 30, FloatSort(10,5))
-        x = simplify(Float_to_z3FP(sqrt(a, rm)))
-        y = simplify(fpSqrt(rm_to_z3rm(rm), Float_to_z3FP(a)))
-        #print(simplify(z3FP_to_Float(x)))
-        #print(simplify(z3FP_to_Float(y)))
-        print(x)
-        print(y)        
-        self.assertTrue(x==y)
-
-        rm = Truncate
-        a = FloatVal(0, 10, 10, FloatSort(10,5))
-        x = simplify(Float_to_z3FP(sqrt(a, rm)))
-        y = simplify(fpSqrt(rm_to_z3rm(rm), Float_to_z3FP(a)))
-        #print(simplify(z3FP_to_Float(x)))
-        #print(simplify(z3FP_to_Float(y)))
-        print(x)
-        print(y)        
-        self.assertTrue(x==y)
-
-        rm = Truncate
-        a = FloatVal(0, 0, 0, FloatSort(10,5))
-        x = simplify(Float_to_z3FP(sqrt(a, rm)))
-        y = simplify(fpSqrt(rm_to_z3rm(rm), Float_to_z3FP(a)))
-        #print(simplify(z3FP_to_Float(x)))
-        #print(simplify(z3FP_to_Float(y)))
-        print(x)
-        print(y)        
-        self.assertTrue(x==y)
-
-        
-        
-
-        #TODO: this one case does not work, idk why:
-        rm = NearestTieToEven
-        a = FloatVal(0, 7, 0, FloatSort(3,2))
-        x = simplify(Float_to_z3FP(sqrt(a, rm)))
-        y = simplify(fpSqrt(rm_to_z3rm(rm), Float_to_z3FP(a)))
-        #print(simplify(z3FP_to_Float(x)))
-        #print(simplify(z3FP_to_Float(y)))
-        print(x)
-        print(y)        
-        #self.assertTrue(x==y)
-        
-
-        rm = Truncate
-        a = FloatVal(0, 100, 1022, FloatSort(52,11))
-        x = simplify(Float_to_z3FP(sqrt(a, rm)))
-        y = simplify(fpSqrt(rm_to_z3rm(rm), Float_to_z3FP(a)))
-        #print(simplify(z3FP_to_Float(x)))
-        #print(simplify(z3FP_to_Float(y)))
-        print(x)
-        print(y)        
-        self.assertTrue(x==y)
-
-
-
-        x = FloatConst("x", 5, 3)
+        # validation fails
+        m, e = 5, 3
+        x = FloatConst("x", m, e)
         x_z3 = Float_to_z3FP(x)
-
         for rm in (NearestTieToEven, NearestTieAwayFromZero, Up, Down, Truncate):
-            result = validate("sqrt", (Float_to_z3FP(sqrt(x, rm)) == fpSqrt(rm_to_z3rm(rm), x_z3)))
+            result = validate("sqrt_(%d, %d)_%s" % (m, e, rm), Float_to_z3FP(sqrt(x, rm)) == fpSqrt(rm_to_z3rm(rm), x_z3))
             self.assertTrue(result)
 
     def test_fma(self):
-        rm = Truncate
-        c = FloatVal(0, 0, 1, FloatSort(10,5))
-        b = FloatVal(1, 512, 0, FloatSort(10,5))
-        a = FloatVal(0, 86, 1, FloatSort(10,5))
-        x = simplify(Float_to_z3FP(fma(a, b, c, rm)))
-        y = simplify(fpFMA(rm_to_z3rm(rm), Float_to_z3FP(a), Float_to_z3FP(b), Float_to_z3FP(c)))
-        #print(x)
-        #print(y)
-        self.assertTrue(x==y)
+        def test(rm, a, b, c, sort):
+            sign_a, mantissa_a, exponent_a = a
+            sign_b, mantissa_b, exponent_b = b
+            sign_c, mantissa_c, exponent_c = c
+            m, e = sort
 
+            sort = FloatSort(m, e)
+            a = FloatVal(sign_a, mantissa_a, exponent_a, sort)
+            b = FloatVal(sign_b, mantissa_b, exponent_b, sort)
+            c = FloatVal(sign_c, mantissa_c, exponent_c, sort)
+            x = simplify(Float_to_z3FP(fma(a, b, c, rm)))
+            y = simplify(fpFMA(rm_to_z3rm(rm), Float_to_z3FP(a), Float_to_z3FP(b), Float_to_z3FP(c)))
+            self.assertTrue(x == y)
 
-        c = FloatVal(0, 424, 10, FloatSort(10,5))
-        b = FloatVal(0, 900, 16, FloatSort(10,5))
-        a = FloatVal(0, 16, 11, FloatSort(10,5))
-        x = simplify(Float_to_z3FP(fma(a, b, c, rm)))
-        y = simplify(fpFMA(rm_to_z3rm(rm), Float_to_z3FP(a), Float_to_z3FP(b), Float_to_z3FP(c)))
-        #print(x)
-        #print(y)
-        self.assertTrue(x==y)
+        test(Truncate, (0, 86, 1), (1, 512, 0), (0, 0, 1), (10, 5))
+        test(Truncate, (0, 16, 11), (0, 900, 16), (0, 424, 10), (10, 5))
+        test(Truncate, (1, 517, 3), (0, 465, 3), (0, 2, 0), (10, 5))
+        test(Truncate, (0, 0, 3), (0, 0, 3), (1, 2, 0), (3, 2))
+        test(Truncate, (0, 12, 2), (0, 9, 1), (1, 28, 7), (5, 3))
+        test(Truncate, (0, 26, 6), (1, 5, 6), (0, 0, 7), (5, 3))
+        test(Down, (1, 0, 1), (0, 7, 0), (0, 7, 0), (3, 2))
+        test(Up, (1, 21, 4), (1, 13, 0), (0, 25, 0), (5, 3))
+        test(Up, (0, 30, 2), (0, 31, 0), (0, 4, 0), (5, 3))
 
-        c = FloatVal(0, 2, 0, FloatSort(10,5))
-        b = FloatVal(0, 465, 3, FloatSort(10,5))
-        a = FloatVal(1, 517, 3, FloatSort(10,5))
-        x = simplify(Float_to_z3FP(fma(a, b, c, rm)))
-        y = simplify(fpFMA(rm_to_z3rm(rm), Float_to_z3FP(a), Float_to_z3FP(b), Float_to_z3FP(c)))
-        #print(x)
-        #print(y)
-        self.assertTrue(x==y)
-
-        #weird stuff is happening:
-        c = FloatVal(1, 3, 0, FloatSort(2,2))
-        b = FloatVal(0, 3, 1, FloatSort(2,2))
-        a = FloatVal(0, 1, 1, FloatSort(2,2))
-        x = simplify(Float_to_z3FP(fma(a, b, c, rm)))
-        y = simplify(fpFMA(rm_to_z3rm(rm), Float_to_z3FP(a), Float_to_z3FP(b), Float_to_z3FP(c)))
-        #print(x)
-        #print(y)
-        #self.assertTrue(x==y)
-
-        c = FloatVal(1, 2, 0, FloatSort(3,2))
-        b = FloatVal(0, 0, 3, FloatSort(3,2))
-        a = FloatVal(0, 0, 3, FloatSort(3,2))
-        x = simplify(Float_to_z3FP(fma(a, b, c, rm)))
-        y = simplify(fpFMA(rm_to_z3rm(rm), Float_to_z3FP(a), Float_to_z3FP(b), Float_to_z3FP(c)))
-        #print(x)
-        #print(y)
-        self.assertTrue(x==y)
-
-        c = FloatVal(1, 28, 7, FloatSort(5,3))
-        b = FloatVal(0, 9, 1, FloatSort(5,3))
-        a = FloatVal(0, 12, 2, FloatSort(5,3))
-        x = simplify(Float_to_z3FP(fma(a, b, c, rm)))
-        y = simplify(fpFMA(rm_to_z3rm(rm), Float_to_z3FP(a), Float_to_z3FP(b), Float_to_z3FP(c)))
-        #print(x)
-        #print(y)
-        self.assertTrue(x==y)
-
-
-        rm = Truncate
-        c = FloatVal(0, 0, 7, FloatSort(5,3))
-        b = FloatVal(1, 5, 6, FloatSort(5,3))
-        a = FloatVal(0, 26, 6, FloatSort(5,3))
-        x = simplify(Float_to_z3FP(fma(a, b, c, rm)))
-        y = simplify(fpFMA(rm_to_z3rm(rm), Float_to_z3FP(a), Float_to_z3FP(b), Float_to_z3FP(c)))
-        #print(x)
-        #print(y)
-        self.assertTrue(x==y) 
-
-
-        rm = Down
-        c = FloatVal(0, 7, 0, FloatSort(3,2))
-        b = FloatVal(0, 7, 0, FloatSort(3,2))
-        a = FloatVal(1, 0, 1, FloatSort(3,2))
-        x = simplify(Float_to_z3FP(fma(a, b, c, rm)))
-        y = simplify(fpFMA(rm_to_z3rm(rm), Float_to_z3FP(a), Float_to_z3FP(b), Float_to_z3FP(c)))
-        #print(x)
-        #print(y)
-        self.assertTrue(x==y)
-
-
-        rm = Down
-        c = FloatVal(0, 7, 0, FloatSort(3,2))
-        b = FloatVal(0, 7, 0, FloatSort(3,2))
-        a = FloatVal(1, 0, 1, FloatSort(3,2))
-        x = simplify(Float_to_z3FP(fma(a, b, c, rm)))
-        y = simplify(fpFMA(rm_to_z3rm(rm), Float_to_z3FP(a), Float_to_z3FP(b), Float_to_z3FP(c)))
-        #print(x)
-        #print(y)
-        self.assertTrue(x==y)
-
-        rm = Up
-        c = FloatVal(0, 25, 0, FloatSort(5,3))
-        b = FloatVal(1, 13, 0, FloatSort(5,3))
-        a = FloatVal(1, 21, 4, FloatSort(5,3))
-        x = simplify(Float_to_z3FP(fma(a, b, c, rm)))
-        y = simplify(fpFMA(rm_to_z3rm(rm), Float_to_z3FP(a), Float_to_z3FP(b), Float_to_z3FP(c)))
-        #print(x)
-        #print(y)
-        self.assertTrue(x==y)
-
-        rm = Up
-        a = FloatVal(0, 4, 0, FloatSort(5,3))
-        b = FloatVal(0, 31, 0, FloatSort(5,3))
-        c = FloatVal(0, 30, 2, FloatSort(5,3))
-        x = simplify(Float_to_z3FP(fma(a, b, c, rm)))
-        y = simplify(fpFMA(rm_to_z3rm(rm), Float_to_z3FP(b), Float_to_z3FP(c), Float_to_z3FP(a)))
-        #print(x)
-        #print(y)
-        self.assertTrue(x==y)
-        result = validate("foo", Float_to_z3FP(fma(a, b, c, rm)) == fpFMA(rm_to_z3rm(rm), Float_to_z3FP(b), Float_to_z3FP(c), Float_to_z3FP(a)))
-        self.assertTrue(result)
-
+        # more z3 strangeness.
+        # the later validation fails with this example.
+        # testing it does not show any errors, though!
         for rm in (Truncate, Up, Down, NearestTieToEven, NearestTieAwayFromZero):
-            a = FloatVal(0, 28, 0, FloatSort(5,3))
-            b = FloatVal(0, 29, 0, FloatSort(5,3))
-            c = FloatVal(0, 10, 3, FloatSort(5,3))
-            x = simplify(Float_to_z3FP(fma(a, b, c, rm)))
-            y = simplify(fpFMA(rm_to_z3rm(rm), Float_to_z3FP(a), Float_to_z3FP(b), Float_to_z3FP(c)))
-            print(x)
-            print(y)
-            print(rm)
-            self.assertTrue(x==y)
+            test(rm, (0, 28, 0), (0, 29, 0), (0, 10, 3), (5, 3))
 
-        #bruteforce: (commented out due to poor performance)
-        '''
-        m,e = 3,2
-        def statement(vars):
-            rm = Down
-            c = FloatVal(vars[0][0], vars[0][1], vars[0][2], FloatSort(m,e))
-            b = FloatVal(vars[1][0], vars[1][1], vars[1][2], FloatSort(m,e))
-            a = FloatVal(vars[2][0], vars[2][1], vars[2][2], FloatSort(m,e))
-            x = simplify(Float_to_z3FP(fma(a, b, c, rm)))
-            y = simplify(fpFMA(rm_to_z3rm(rm), Float_to_z3FP(a), Float_to_z3FP(b), Float_to_z3FP(c)))
-            if simplify(x!=y):
-                print(x)
-                print(y)
-            self.assertTrue(x==y or simplify(And(fpIsInf(Float_to_z3FP(fma(a, b, c, rm))), Not(fpIsInf(fpFMA(rm_to_z3rm(rm), Float_to_z3FP(a), Float_to_z3FP(b), Float_to_z3FP(c)))))))
-
-        variables = (FloatConst("a", m, e), FloatConst("b", m, e), FloatConst("c", m, e))
-        bruteforce(variables,statement)
-        '''
-
-
-        '''z3 messes up the following one
-        c = FloatVal(0, 16, 3, FloatSort(5,3))
-        b = FloatVal(0, 7, 6, FloatSort(5,3))
-        a = FloatVal(0, 21, 5, FloatSort(5,3))
-        x = simplify(Float_to_z3FP(fma(a, b, c, rm)))
-        y = simplify(fpFMA(rm_to_z3rm(rm), Float_to_z3FP(a), Float_to_z3FP(b), Float_to_z3FP(c)))
-        print(x)
-        print(y)
-        self.assertTrue(x==y)
-        '''
+        # z3 messes up this example:
+        # test(Truncate, (0, 21, 5), (0, 7, 6), (0, 16, 3), (5, 3))
         
-        x, y, z = FloatConst("x", 5, 3), FloatConst("y", 5, 3), FloatConst("z", 5, 3)
+        # this validation eventually fails with a model that is not reproducible
+        m, e = 5, 3
+        x, y, z = FloatConst("x", m, e), FloatConst("y", m, e), FloatConst("z", m, e)
         x_z3, y_z3, z_z3 = Float_to_z3FP(x), Float_to_z3FP(y), Float_to_z3FP(z)
-
         for rm in (Up, Truncate, Down, NearestTieToEven, NearestTieAwayFromZero):
-            result = validate("fma",
-                Or(
-                    ( Float_to_z3FP(fma(x, y, z, rm)) == fpFMA(rm_to_z3rm(rm), y_z3, z_z3, x_z3) ),
-                    And(fpIsInf(Float_to_z3FP(fma(x, y, z, rm))), Not(fpIsInf(fpFMA(rm_to_z3rm(rm), x_z3, y_z3, z_z3)))),
-                )
-            )
+            r = Float_to_z3FP(fma(x, y, z, rm))
+            r_z3 = fpFMA(rm_to_z3rm(rm), y_z3, z_z3, x_z3)
+            result = validate("fma_(%d,%d)_%s" % (m, e, rm),
+                              Or(r == r_z3, And(fpIsInf(r), Not(fpIsInf(r_z3)))))
             self.assertTrue(result)
-            print("Rounding mode " + str(rm) + " ok")
     
     def test_min(self):
+        # TODO ?
         pass
     
     def test_max(self):
+        # TODO ?
         pass
 
     def test_pack(self):
+        def test_inv(x):
+            case, unpacked = unpack(x)
+            self.true(eq_bitwise(pack(unpacked, self.__sort, Truncate, case), x))
+        
+        test_inv(self.__pos_zero)
+        test_inv(self.__neg_zero)
+        test_inv(self.__pos_inf)
+        test_inv(self.__neg_inf)
+        test_inv(self.__normal5)
+        test_inv(self.__normal6)
+        test_inv(self.__nan1)
+        test_inv(self.__normal1)
+        test_inv(self.__neg_normal1)
+        test_inv(self.__normal2)
+        test_inv(self.__normal3)
+        test_inv(self.__normal4)
+        test_inv(self.__subnormal1)
+        test_inv(self.__subnormal2)
 
-        case, unpacked = unpack(self.__pos_zero)
-        self.true(eq_bitwise(pack(unpacked, self.__sort, Truncate, case), self.__pos_zero))
-
-        case, unpacked = unpack(self.__neg_zero)
-        self.true(eq_bitwise(pack(unpacked, self.__sort,Truncate, case), self.__neg_zero))
-
-        case, unpacked = unpack(self.__pos_inf)
-        self.true(eq_bitwise(pack(unpacked, self.__sort, Truncate, case), self.__pos_inf))
-
-        case, unpacked = unpack(self.__neg_inf)
-        self.true(eq_bitwise(pack(unpacked, self.__sort, Truncate, case), self.__neg_inf))
-
-        case, unpacked = unpack(self.__normal5)
-        self.true(eq_bitwise(pack(unpacked, self.__sort, Truncate, case), self.__normal5))
-
-        case, unpacked = unpack(self.__normal6)
-        self.true(eq_bitwise(pack(unpacked, self.__sort, Truncate), self.__normal6))
-
-        case, unpacked = unpack(self.__nan1)
-        self.true(eq_bitwise(pack(unpacked, self.__sort, Truncate, nan_case), self.__nan1))
-
-        case, unpacked = unpack(self.__normal1)
-        self.true(eq_bitwise(pack(unpacked, self.__sort, Truncate), self.__normal1))
-
-        case, unpacked = unpack(self.__neg_normal1)
-        self.true(eq_bitwise(pack(unpacked, self.__sort, Truncate), self.__neg_normal1))
-
-        case, unpacked = unpack(self.__normal2)
-        self.true(eq_bitwise(pack(unpacked, self.__sort, Truncate), self.__normal2))
-
-        case, unpacked = unpack(self.__normal3)
-        self.true(eq_bitwise(pack(unpacked, self.__sort, Truncate), self.__normal3))
-
-        case, unpacked = unpack(self.__normal4)
-        self.true(eq_bitwise(pack(unpacked, self.__sort, Truncate), self.__normal4))
-
-        case, unpacked = unpack(self.__subnormal1)
-        self.true(eq_bitwise(pack(unpacked, self.__sort, Truncate), self.__subnormal1))
-
-        case, unpacked = unpack(self.__subnormal2)
-        self.true(eq_bitwise(pack(unpacked, self.__sort, Truncate), self.__subnormal2))
-
-        x = FloatConst("x", 5, 5)
+        m, e = 5, 5
+        x = FloatConst("x", m, e)
         case, unpacked = unpack(x)
-        for rm in (Up, Down, Truncate, NearestTieToEven, NearestTieAwayFromZero):
-            packed = pack(unpacked, FloatSort(5, 5), rm, case)
+        for rm in (Truncate, Up, Down, NearestTieToEven, NearestTieAwayFromZero):
+            packed = pack(unpacked, FloatSort(m, e), rm, case)
             result = validate("pack_inverse_unpack_%s" % rm, Or(And(is_nan(x), is_nan(packed)), eq_bitwise(packed, x)))
             self.assertTrue(result)
-
-
-def validate(s, statement):
-    solver = Solver()
-    set_param("parallel.enable", True)
-    set_param("parallel.threads.max", 4)
-    solver.add(Not(statement))
-    print("\nstarting validation of %s" % s)
-    result = solver.check()
-    if(result == sat):
-        print(solver.model())
-    return result == unsat
-
-
-
-def bruteforce(variables, func):
-    sort = get_sort(variables[0])
-    m_size, e_size = sizes(sort)
-    m_min, e_min, s_min = 0, 0, 0
-    m_max, e_max, s_max = 2**m_size-1, 2**e_size-1, 1
-
-    
-    vals = []
-    for s in range(s_min, s_max):
-        for m in range(m_min, m_max):
-            for e in range(e_min, e_max):
-                vals.append((s,m,e))
-
-
-    solutions = itertools.product(vals, repeat = len(variables))
-    
-    for sol in solutions:
-        print(sol)
-        func(sol)
-    
-    
 
 if __name__ == '__main__':
     unittest.main()

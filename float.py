@@ -569,6 +569,7 @@ def rem(a : DatatypeRef, b : DatatypeRef) -> DatatypeRef:
     # also guarantee space for 2**(e+1)+m.
     intermediate_sort = FloatSort(m, e + 1 + guaranteed_space(2**(e+1), m, False))
     old_a, old_b = a, b
+    zero = FloatVar(result_sort.sign(a), BitVecVal(0, m), BitVecVal(0, e), result_sort)
 
     case_a, a = unpack(a)
     case_b, b = unpack(b)
@@ -587,7 +588,7 @@ def rem(a : DatatypeRef, b : DatatypeRef) -> DatatypeRef:
               case_a == inf_case, 
               case_b == zero_case),
               FloatValNaN(result_sort),
-        If(Or(case_a == zero_case, is_zero(r)), FloatVar(result_sort.sign(a), BitVecVal(0, m), BitVecVal(0, e), result_sort),
+        If(Or(case_a == zero_case, is_zero(r)), zero,
         If(case_b == inf_case, old_a, r)))
     return r
 
