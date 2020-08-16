@@ -1,4 +1,3 @@
-# Contains some utility functions
 from z3 import *
 from math import floor, log2
 

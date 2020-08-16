@@ -336,7 +336,6 @@ def fma(a, b, c, rounding_mode : DatatypeRef = Truncate) -> DatatypeRef:
     mul_result = FloatVar(sign_mul, mantissa_mul, exponent_mul, mul_sort)
     m_mul, e_mul = sizes(mul_sort)
 
-    # TODO: use convert_float here?
     size_dif = mantissa_mul.size() - unpack_m
     # append size_dif many zeros to the right
     mantissa_c_new = ZeroExt(size_dif, unpack_sort.mantissa(c)) << size_dif 

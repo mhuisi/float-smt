@@ -70,9 +70,6 @@ class SMTFloat:
     def __pos__(self) -> SMTFloat:
         return SMTFloat(self.expr)
 
-    def __invert__(self):
-        pass # TODO
-
     def __abs__(self) -> SMTFloat:
         return SMTFloat(floatsmt.abs(self.expr))
 
