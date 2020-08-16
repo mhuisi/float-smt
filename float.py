@@ -135,13 +135,20 @@ def is_nan(a : DatatypeRef, nan_value : int = 0) -> BoolRef:
     else:
         return And(mantissa == BitVecVal(nan_value, m), exponent == inf_exp)
 
-# TODO: docstrings
 def is_subnormal(a : DatatypeRef) -> BoolRef:
+    '''
+    Checks whether a is subnormal. Floats are subnormal if their exponent is 0
+    and they not inf.
+    '''
     s = get_sort(a)
     m, e = sizes(s)
     return And(Not(s.mantissa(a) == BitVecVal(0, m)), s.exponent(a) == BitVecVal(0, e))
 
 def is_normal(a : DatatypeRef) -> BoolRef:
+    '''
+    Checks whether a is normal. A float is normal
+    if it is not subnormal, not zero and neither NaN nor inf.
+    '''
     return And(Not(is_inf(a)), 
                Not(is_zero(a)), 
                Not(is_subnormal(a)), 
