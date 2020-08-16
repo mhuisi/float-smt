@@ -23,14 +23,8 @@ class SMTFloat:
     def __truediv__(self, other) -> SMTFloat:
         return SMTFloat(float.div(self.expr, other.expr, rm))
 
-    def _floordiv__(self, other):
-        pass #TODO
-
     def __mod__(self, other) -> SMTFloat:
         return SMTFloat(float.rem(self.expr, other.expr))
-
-    def __pow__(self, other):
-        pass #TODO: liesse sich eventuell einfach implementieren, solange other ein python int is
 
     #Comparisons:
     def __lt__(self, other) -> BoolRef:
@@ -64,14 +58,8 @@ class SMTFloat:
     def __idiv__(self, other):
         self.expr = float.div(self.expr, other.expr, rm)
 
-    def __ifloordiv__(self, other):
-        pass #TODO
-
     def __imod__(self, other):
         self.expr = float.rem(self.expr, other.expr, rm)
-    
-    def __ipow__(self, other):
-        pass #TODO
 
     #Unary:
     def __neg__(self) -> SMTFloat:
