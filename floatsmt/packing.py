@@ -1,6 +1,6 @@
 from z3 import *
 from floatsmt.predicates import *
-from utils import *
+from floatsmt.utils import *
 
 # Special case of unpacked floats
 FloatCase, (unpacked_normal_case, zero_case, inf_case, nan_case) = EnumSort('FloatCase', ['unpacked_normal', 'zero', 'inf', 'nan'])

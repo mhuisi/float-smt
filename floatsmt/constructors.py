@@ -1,6 +1,6 @@
 from z3 import *
 from floatsmt.sorts import *
-import converter
+import floatsmt.converter as converter
 
 def FloatConst(name : str, mantissa_size : int, exponent_size : int) -> DatatypeRef:
     return Const(name, FloatSort(mantissa_size, exponent_size))
