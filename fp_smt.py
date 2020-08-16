@@ -1,5 +1,6 @@
 from __future__ import annotations
 from float import *
+import float
 
 rm = Truncate #default value
 
@@ -86,8 +87,9 @@ class SMTFloat:
     def sizes(self) -> (int, int):
         return float.sizes(self.expr)
 
+    def sort(self):
+        return get_sort(self)
 
-#-----------------------------------------------------------------------------------------------------------------
     def get_sort(self) -> DatatypeSortRef:
         return float.get_sort(self.expr)
 
