@@ -1,11 +1,13 @@
 from typing import NamedTuple, Callable
+from dataclasses import dataclass
 from enum import Enum
 
 class ParseState(NamedTuple):
     s : str # string
     i : int # index
 
-class DecFloat(NamedTuple): # sign * mantissa * 10^exponent
+@dataclass
+class DecFloat(): # sign * mantissa * 10^exponent
     # we need to track the sign to be able to distinguish +0 and -0
     s : int # sign
     m : int # mantissa
@@ -135,7 +137,7 @@ def convert(s : str, r : RoundingMode, m_size : int, e_size : int) -> Float:
     if sig == 2**(m_size+1):
         sig = 2**m_size
         scale += 1
-    mantissa = ("{0:0%db}" % m_size).format(sig)
+    mantissa = ("{0:0%db}" % m_size).format(int(sig))
     # subnormal
     if len(mantissa) <= m_size:
         return Float(sign, mantissa, e_size*"0")
