@@ -163,7 +163,7 @@ def eq_float(a : DatatypeRef, b : DatatypeRef) -> BoolRef:
     '''
     ensure_eq_sort(a, b)
     return And(Not(Or(is_nan(a), is_nan(b))), 
-               Or(And(is_zero(a), is_zero(a)), 
+               Or(And(is_zero(a), is_zero(b)), 
                   eq_bitwise(a, b)))
 
 def gt(a : DatatypeRef, b : DatatypeRef) -> BoolRef:
@@ -712,7 +712,11 @@ def fma(a, b, c, rounding_mode : DatatypeRef = Truncate) -> DatatypeRef:
     return result
     
 def min_float(a : DatatypeRef, b : DatatypeRef) -> DatatypeRef:
-    return If(gte(a, b), b, a)
+    return If(is_nan(a), a, 
+           If(is_nan(b), b,
+           If(And(is_neg_zero(a), is_pos_zero(b)), a,
+           If(And(is_pos_zero(a), is_neg_zero(b)), b,
+           If(lte(a, b), a, b)))))
 
 def max_float(a : DatatypeRef, b : DatatypeRef) -> DatatypeRef:
     return neg(min_float(neg(a), neg(b)))

@@ -440,12 +440,40 @@ class Operations(unittest.TestCase):
             self.assertTrue(result)
     
     def test_min(self):
-        # TODO ?
-        pass
+        def test(a, b, sort):
+            sign_a, mantissa_a, exponent_a = a
+            sign_b, mantissa_b, exponent_b = b
+            m, e = sort
+            sort = FloatSort(m, e)
+            a = FloatVal(sign_a, mantissa_a, exponent_a, sort)
+            b = FloatVal(sign_b, mantissa_b, exponent_b, sort)
+            print(simplify(Float_to_z3FP(a)), simplify(Float_to_z3FP(b)))
+            x = simplify(Float_to_z3FP(min_float(a, b)))
+            y = simplify(fpMin(Float_to_z3FP(a), Float_to_z3FP(b)))
+            self.assertTrue(x == y)
+
+        test((0, 1, 2), (0, 0, 0), (10, 5))
+        # z3 incorrectly handles zeros:
+        # test((0, 0, 0), (1, 0, 0), (10, 5))
+        # z3 incorrectly handles NaNs:
+        # test((0, 2, 31), (0, 0, 0), (10, 5))
+
+        m, e = 10, 5
+        x, y = FloatConst("x", m, e), FloatConst("y", m, e)
+        x_z3, y_z3 = Float_to_z3FP(x), Float_to_z3FP(y)
+        result = validate("min_(%d,%d)" % (m, e), 
+                          Or(is_nan(x), is_nan(y), And(is_zero(x), is_zero(y)), 
+                             Float_to_z3FP(min_float(x, y)) == fpMin(x_z3, y_z3)))
+        self.assertTrue(result)
     
     def test_max(self):
-        # TODO ?
-        pass
+        m, e = 10, 5
+        x, y = FloatConst("x", m, e), FloatConst("y", m, e)
+        x_z3, y_z3 = Float_to_z3FP(x), Float_to_z3FP(y)
+        result = validate("max_(%d,%d)" % (m, e), 
+                          Or(is_nan(x), is_nan(y), And(is_zero(x), is_zero(y)), 
+                             Float_to_z3FP(max_float(x, y)) == fpMax(x_z3, y_z3)))
+        self.assertTrue(result)
 
     def test_pack(self):
         def test_inv(x):
