@@ -368,8 +368,8 @@ def fma(a, b, c, rounding_mode : DatatypeRef = Truncate) -> DatatypeRef:
     return result
     
 def min_float(a : DatatypeRef, b : DatatypeRef) -> DatatypeRef:
-    return If(is_nan(a), a, 
-           If(is_nan(b), b,
+    return If(is_nan(a), b, 
+           If(is_nan(b), a,
            If(And(is_neg_zero(a), is_pos_zero(b)), a,
            If(And(is_pos_zero(a), is_neg_zero(b)), b,
            If(lte(a, b), a, b)))))

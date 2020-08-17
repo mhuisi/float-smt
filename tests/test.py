@@ -222,7 +222,7 @@ class ComparisonOps(unittest.TestCase):
         
         x,y = FloatConst("x", 23, 8), FloatConst("y", 23, 8)
         x_z3, y_z3 = Float_to_z3FP(x), Float_to_z3FP(y)
-        result = validate("gt", Or(gt(x, y) == fpGT(x_z3, y_z3), is_nan(x), is_nan(y)))
+        result = validate("gt", gt(x, y) == fpGT(x_z3, y_z3))
         self.assertTrue(result)
 
 class Operations(unittest.TestCase):
@@ -450,16 +450,14 @@ class Operations(unittest.TestCase):
             self.assertTrue(x == y)
 
         test((0, 1, 2), (0, 0, 0), (10, 5))
-        # z3 incorrectly handles zeros:
-        # test((0, 0, 0), (1, 0, 0), (10, 5))
-        # z3 incorrectly handles NaNs:
-        # test((0, 2, 31), (0, 0, 0), (10, 5))
 
+        # z3 does not evaluate min(+0, -0) at all, while we do.
+        # the smtlib standard allows for this disparity.
         m, e = 10, 5
         x, y = FloatConst("x", m, e), FloatConst("y", m, e)
         x_z3, y_z3 = Float_to_z3FP(x), Float_to_z3FP(y)
         result = validate("min_(%d,%d)" % (m, e), 
-                          Or(is_nan(x), is_nan(y), And(is_zero(x), is_zero(y)), 
+                          Or(And(is_zero(x), is_zero(y)), 
                              Float_to_z3FP(min_float(x, y)) == fpMin(x_z3, y_z3)))
         self.assertTrue(result)
     
@@ -468,7 +466,7 @@ class Operations(unittest.TestCase):
         x, y = FloatConst("x", m, e), FloatConst("y", m, e)
         x_z3, y_z3 = Float_to_z3FP(x), Float_to_z3FP(y)
         result = validate("max_(%d,%d)" % (m, e), 
-                          Or(is_nan(x), is_nan(y), And(is_zero(x), is_zero(y)), 
+                          Or(And(is_zero(x), is_zero(y)), 
                              Float_to_z3FP(max_float(x, y)) == fpMax(x_z3, y_z3)))
         self.assertTrue(result)
 
