@@ -109,10 +109,23 @@ def pack(f : DatatypeRef, sort : DatatypeSortRef, rounding_mode : DatatypeRef = 
     underflow = And(Not(normal_post_rounding), mantissa == BitVecVal(0, m))
     overflow = UGE(exponent, 2**e - 1)
 
+    overflow_rounded_into_normals = Or(And(rounding_mode == Up, sign == 1),
+                                       And(rounding_mode == Down, sign == 0),
+                                       rounding_mode == Truncate)
     exponent = Extract(e-1, 0, exponent)
     exponent = If(underflow, BitVecVal(0, e), 
-               If(overflow, BitVecVal(2**e-1, e), exponent))
-    mantissa = If(Or(underflow, overflow), BitVecVal(0, m), mantissa) 
+               If(overflow, 
+                  If(overflow_rounded_into_normals, 
+                     BitVecVal(2**e-2, e),
+                     BitVecVal(2**e-1, e)),
+                  exponent))
+
+    mantissa = If(underflow, BitVecVal(0, m),
+               If(overflow,
+                  If(overflow_rounded_into_normals,
+                     BitVecVal(2**m-1, m),
+                     BitVecVal(0, m)),
+                  mantissa))
 
     exponent = If(case == zero_case, BitVecVal(0, e), 
                If(Or(case == inf_case, case == nan_case), BitVecVal(2**e-1, e), exponent))

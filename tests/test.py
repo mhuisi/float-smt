@@ -47,8 +47,7 @@ class Float(unittest.TestCase):
         test(Up, (0, 87, 0), (10, 5), (3, 2))
         test(Up, (0, 192, 3), (10, 5), (3, 2))
         test(Up, (0, 270468, 0), (23, 8), (10, 5))
-        # z3 messes this one up:
-        # test(Truncate, (1, 9, 5), (5, 3), (3, 2))
+        test(Truncate, (1, 9, 5), (5, 3), (3, 2))
         
         sizes = ((10, 5), (23, 8), (52, 11))
         for (m, e) in sizes:
@@ -61,8 +60,7 @@ class Float(unittest.TestCase):
                 for rm in (Truncate, Up, Down, NearestTiesToEven, NearestTiesAwayFromZero):
                     r = Float_to_z3FP(convert_float(x, result_sort, rm))
                     r_z3 = fpFPToFP(rm_to_z3rm(rm), x_z3, result_sort_z3)
-                    result = validate("convert (%d,%d)->(%d,%d) [%s]" % (m, e, m_result, e_result, rm),
-                                      Or(r == r_z3, And(fpIsInf(r), Not(fpIsInf(r_z3)))))
+                    result = validate("convert (%d,%d)->(%d,%d) [%s]" % (m, e, m_result, e_result, rm), r == r_z3)
                     self.assertTrue(result)
 
 class is_functions(unittest.TestCase):
@@ -271,8 +269,7 @@ class Operations(unittest.TestCase):
         for rm in (Truncate, Up, Down, NearestTiesToEven, NearestTiesAwayFromZero):
             r = Float_to_z3FP(op(x, y, rm))
             r_z3 = z3_op(rm_to_z3rm(rm), x_z3, y_z3)
-            result = validate("%s_(%d,%d)_%s" % (name, m, e, rm), 
-                              Or(r == r_z3, And(fpIsInf(r), Not(fpIsInf(r_z3)))))
+            result = validate("%s_(%d,%d)_%s" % (name, m, e, rm), r == r_z3)
             self.assertTrue(result)
 
     def test_abs(self):
@@ -320,8 +317,7 @@ class Operations(unittest.TestCase):
         test(Truncate, (1, 4, 15), (0, 4, 15), (10, 5))
         test(Truncate, (0, 4, 15), (1, 4, 15), (10, 5))
         test(Truncate, (0, 0, 0), (1, 0, 0), (10, 5))
-        # z3 messes up this example:
-        # test(Truncate, (0, 0, 30), (0, 0, 30), (10, 5))
+        test(Truncate, (0, 0, 30), (0, 0, 30), (10, 5))
 
         # very small floats
         self.validate_op("add", (3, 2), (add, fpAdd))
@@ -334,14 +330,12 @@ class Operations(unittest.TestCase):
 
         test(Truncate, (0, 136, 2), (0, 1009, 1), (10, 5))
         test(Truncate, (0, 136, 2), (0, 1009, 1), (10, 5))
-        # z3 messes up this example:
-        # test(Truncate, (0, 0, 16), (0, 0, 30), (10, 5))
+        test(Truncate, (0, 0, 16), (0, 0, 30), (10, 5))
 
         self.validate_op("mul", (10, 5), (mul, fpMul))
 
     def test_div(self):
-        # z3 messes up this example:
-        # self.assert_float_eq(Truncate, (0, 0, 24), (0, 0, 7), (10, 5), (div, fpDiv))
+        self.assert_float_eq(Truncate, (0, 0, 24), (0, 0, 7), (10, 5), (div, fpDiv))
 
         self.validate_op("div", (10, 5), (div, fpDiv))
 
@@ -415,6 +409,7 @@ class Operations(unittest.TestCase):
         test(Down, (1, 0, 1), (0, 7, 0), (0, 7, 0), (3, 2))
         test(Up, (1, 21, 4), (1, 13, 0), (0, 25, 0), (5, 3))
         test(Up, (0, 30, 2), (0, 31, 0), (0, 4, 0), (5, 3))
+        test(Truncate, (0, 21, 5), (0, 7, 6), (0, 16, 3), (5, 3))
 
         # more z3 strangeness.
         # the later validation fails with this example.
@@ -422,9 +417,6 @@ class Operations(unittest.TestCase):
         for rm in (Truncate, Up, Down, NearestTiesToEven, NearestTiesAwayFromZero):
             test(rm, (0, 28, 0), (0, 29, 0), (0, 10, 3), (5, 3))
 
-        # z3 messes up this example:
-        # test(Truncate, (0, 21, 5), (0, 7, 6), (0, 16, 3), (5, 3))
-        
         # this validation eventually fails with a model that is not reproducible
         m, e = 5, 3
         x, y, z = FloatConst("x", m, e), FloatConst("y", m, e), FloatConst("z", m, e)
@@ -432,8 +424,7 @@ class Operations(unittest.TestCase):
         for rm in (Up, Truncate, Down, NearestTiesToEven, NearestTiesAwayFromZero):
             r = Float_to_z3FP(fma(x, y, z, rm))
             r_z3 = fpFMA(rm_to_z3rm(rm), y_z3, z_z3, x_z3)
-            result = validate("fma_(%d,%d)_%s" % (m, e, rm),
-                              Or(r == r_z3, And(fpIsInf(r), Not(fpIsInf(r_z3)))))
+            result = validate("fma_(%d,%d)_%s" % (m, e, rm), r == r_z3)
             self.assertTrue(result)
     
     def test_min(self):
