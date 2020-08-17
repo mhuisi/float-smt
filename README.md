@@ -12,4 +12,3 @@ The operations have largely been verified against Z3 for 16 bit floats. Notable 
 - `fma`, for which Z3 produced non-reproducible edge-cases.
 - `sqrt`, which is incomplete as of now, but produces reasonable results in many cases.
 - `rem`, for which we could not even complete the (5, 3) verification due to bad performance.
-- Some edge cases for which Z3 itself behaves incorrectly.
