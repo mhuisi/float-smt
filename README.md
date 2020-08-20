@@ -1,4 +1,6 @@
 # float-smt
+Experimental float library for the Z3 SMT solver.
+
 ## Usage instructions
 1. Install a version more recent than Python 3.7.4
 2. Install z3-solver from pypi (https://pypi.org/project/z3-solver/)
