@@ -131,6 +131,26 @@ The tests reside in \verb|tests/test.py|. Due to the costly validation against Z
 
 \section{Project structure}
 % TODO: superficially explain the different components of the library (sorts, operations, packing etc.) and the file/module organization. shortly explain api.py and its relation to the other stuff so we don't need to explain api.py later.
+We will begin by outlining the conceptual structure of the library and then detail the concrete file structure. 
+
+Each floating point value has an associated sort, which can roughly be understood as the type of the value. The sort contains the mantissa bit width and the exponent bit width for the floating point value. As such, floatsmt is entirely polymorphic over these widths. 
+Given a sort, there are multiple different constructors for floating point values. These enable the creation of either floats with specific Python-/Z3 values, or float constants, which can be seen as existentially-quantified free variables. All of these constructors produce Z3 values.
+Once a float value has been created, multiple operations and predicates can be used on it. The arithmetical operations are the most complex part of the library and work in multiple steps. First, both floats are pre-processed into a format that is easier to handle when calculating the result of the operations. Second, the corresponding operation is executed on the pre-processed float. Operations are fairly unrestricted in terms of how they can manipulate these preprocessed floats. Finally, the result of the operation is post-processed, where the result of the operation in the pre-processed format is converted back into a proper float.
+
+Let us now explain the purpose of each file in the directory structure.
+\begin{itemize}
+	\item \verb|api.py|: Wraps user-facing functions and provides operator-overloading for some.
+	\item \verb|constructors.py|: Provides functions that create floating point values of a specific sort, like a constructor that creates a float value from a string in decimal scientific notation.
+	\item \verb|conversions.py|: Contains functions that convert floating point values to other Z3 sorts, like bit vectors or Z3 floats.
+	\item \verb|converter.py|: Provides a function that parses a string in decimal notation and then converts the resulting decimal float to a binary float, rounding accordingly.
+	\item \verb|operations.py|: Implements several arithmetical operations, like $+$, $*$, $|\cdot|$ or $\min$.
+	\item \verb|packing.py|: Yields the pre- and post-processing utilities for arithmetical operations, as well as a function that translates between different float sorts.
+	\item \verb|predicates.py|: Contains predicates that take floats and produce booleans, like $>=$ or $==$.
+	\item \verb|sorts.py|: Implements the floating point sort and a sort for the rounding mode.
+	\item \verb|utils.py|: Provides several utility functions, like a function to count leading zeros and several helper functions to ensure that bit vector operations always take arguments of the same width and never overflow when using arbitrary bit width floats.
+	 
+\end{itemize}
+
 
 \section{Implementation details}
 % TODO: briefly note which functions were implemented and go into detail for interesting functions. explain how interesting functions were implemented, but also why certain design decisions were made.
