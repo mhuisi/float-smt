@@ -14,7 +14,7 @@
 
 \bibliographystyle{plainurl}% the mandatory bibstyle
 
-\title{Documentation of float-smt}
+\title{Documentation of floatsmt}
 
 \author{Felix Griesau}{Karlsruhe Institute of Technology, Germany}{TODO}{}{}
 \author{Marc Huisinga}{Karlsruhe Institute of Technology, Germany}{mhuisi@protonmail.com}{}{}
@@ -44,13 +44,27 @@
 \maketitle
 
 \begin{abstract}
-This report documents the float-smt library, which implements a floating point theory using Z3. 
+This report documents the floatsmt library, which implements a floating point theory using the Z3 SMT solver. 
 \end{abstract}
 
 % Use \autoref for references and lstlisting for code.
 
 \section{Introduction}
-% TODO: motivate the project
+The IEEE 754 floating point standard \cite{ieee} is complex. Manually ensuring the correctness of programs that use floating point operations requires great care: 
+\begin{itemize}
+\item Edge cases like $+0$, $-0$, $+\infty$, $-\infty$ and \verb|NaN| need to be handled correctly, since all operations behave differently when applied to one of these edge cases.
+\item Rounding errors need to be kept in check. Depending on the operation, the values and even the rounding mode involved, rounding errors may grow very large.
+\item Operations on normals and subnormals can unintentionally produce one of the above edge cases in the situation of an underflow or an overflow.
+\end{itemize}
+Aside from these issues, floating point operations can always be understood in terms of their semantics, where a float is mapped to its real number value, the corresponding operation is performed over the reals and the result is rounded and mapped back to the floating point numbers.
+
+Unfortunately, implementations of the floating point standard cannot easily and efficiently perform operations on the real numbers. Hence, implementations need to perform operations on floats using bit vectors and ensure that the result is still rounded correctly. This is even more error-prone than the semantical view of floats that users of these implementations work with, and very costly if erroneous\footnote{See \url{https://web.archive.org/web/20190618044444/http://www.trnicely.net/pentbug/pentbug.html} for an infamous example}. 
+
+To combat these complexities, verification tools like SMT solvers have recently begun supporting floating point theories \cite{semantics}. These theories can be used to prove properties about implementations of the floating point standard and programs that use floats, ensuring correctness in regards to these properties.
+
+But who watches the watchmen? How do we guarantee that the SMT solver implementation of the floating point theory is itself correct? After all, such an SMT solver implementation needs to surpass the same complexities as other floating point implementations.
+
+To help reduce this uncertainty in the sense of ``trust, but verify'', we implemented floatsmt, a floating point theory for the Z3 SMT solver \cite{z3}. floatsmt was implemented from scratch, not based on any reference implementation and then verified against Z3's own floating point theory. In our verification, we found no bugs in Z3's theory, gaining a significant amount of trust in the floating point theory of Z3 in the process. This report details our decisions for the design and implementation of floatsmt.
 
 \section{Usage instructions}
 % TODO: installation, usage and testing instructions
