@@ -31,7 +31,7 @@
 
 \relatedversion{}
 
-\supplement{} %TODO: add github repo
+\supplement{\url{https://github.com/mhuisi/float-smt}}
 
 \acknowledgements{}
 
@@ -60,17 +60,74 @@ Aside from these issues, floating point operations can always be understood in t
 
 Unfortunately, implementations of the floating point standard cannot easily and efficiently perform operations on the real numbers. Hence, implementations need to perform operations on floats using bit vectors and ensure that the result is still rounded correctly. This is even more error-prone than the semantical view of floats that users of these implementations work with, and very costly if erroneous\footnote{See \url{https://web.archive.org/web/20190618044444/http://www.trnicely.net/pentbug/pentbug.html} for an infamous example}. 
 
-To combat these complexities, verification tools like SMT solvers have recently begun supporting floating point theories \cite{semantics}. These theories can be used to prove properties about implementations of the floating point standard and programs that use floats, ensuring correctness in regards to these properties.
+To combat these complexities, verification tools like SMT solvers have recently begun supporting floating point theories \cite{semantics}. These theories can be used to prove properties about implementations of the floating point standard and programs that use floats, ensuring correctness in regard to these properties.
 
 But who watches the watchmen? How do we guarantee that the SMT solver implementation of the floating point theory is itself correct? After all, such an SMT solver implementation needs to surpass the same complexities as other floating point implementations.
 
 To help reduce this uncertainty in the sense of ``trust, but verify'', we implemented floatsmt, a floating point theory for the Z3 SMT solver \cite{z3}. floatsmt was implemented from scratch, not based on any reference implementation and then verified against Z3's own floating point theory. In our verification, we found no bugs in Z3's theory, gaining a significant amount of trust in the floating point theory of Z3 in the process. This report details our decisions for the design and implementation of floatsmt.
 
 \section{Usage instructions}
-% TODO: installation, usage and testing instructions
+floatsmt is a Python library for the Z3 Python interface ``z3py''.
 
-\section{Technical environment}
-% TODO: describe stuff like python, z3, z3py and our development environment
+\subsection{Installation}
+\begin{enumerate}
+\item Install Python ($\geq$ 3.7.4) (\url{https://www.python.org/downloads/}).
+\item Install the z3-solver package ($\geq$ 4.8.8.0) via \verb|pip install z3-solver| (\url{https://pypi.org/project/z3-solver/}).
+\item Install git (\url{https://git-scm.com/}).
+\item Clone the repository via \verb|git clone https://github.com/mhuisi/float-smt|.
+\item Copy the \verb|floatsmt| directory to where the library will be used.
+\item Add \verb|import floatsmt| to the top of the Python file where the library will be used and get started.
+\end{enumerate} 
+
+\subsection{Usage}
+What follows is a code snippet to show how the library is used.
+\begin{lstlisting}[language=Python]
+from floatsmt.api import *
+
+# Sets the rounding mode globally.
+# Must be one of 
+# {NearestTiesToEven,NearestTiesAwayFromZero,Up,Down,Truncate}.
+set_default_rm(NearestTiesToEven)
+
+# Create the floating point sort which we will use.
+# floatsmt supports arbitrary bit widths.
+# The first argument denotes the mantissa width,
+# the second argument denotes the exponent width.
+# (23, 8) is a standard 32 bit float.
+sort = FloatSort(23, 8)
+
+# Create a float constant from a specific bit representation.
+x = SMTFloat.FloatVal(0, 0b1011, 0b1111, sort)
+# Create a float constant from a decimal representation. 
+# The mode for rounding from decimal to binary must be one of
+# {NEAREST_TIE_TO_EVEN,NEAREST_TIE_AWAY_FROM_ZERO,UP,DOWN,TRUNCATE}.
+y = SMTFloat.FloatValDec("0.123e-2", 
+      converter.RoundingMode.NEAREST_TIE_TO_EVEN, sort)
+
+# Many operations can be used via Python operator overloading.
+print(x)
+print(x + y)
+print(x * x)
+print(x - y) 
+print(x / y)
+
+# Constants can be created via 
+# FloatConst(name, mantissa_width, exponent_width)
+# and then used for proofs.
+x = SMTFloat.FloatConst("x", 23, 8)
+y = SMTFloat.FloatConst("y", 23, 8)
+
+# E.g. in floats always x > 0 & y > 0 => x * y >= 0
+zero = SMTFloat.FloatValZero(FloatSort(23, 8))
+solver = Solver()
+condition = Implies(And(x > zero, y > zero), x * y >= zero)
+solver.add(Not(condition))
+print(solver.check())
+\end{lstlisting}
+
+\subsection{Testing}
+The tests reside in \verb|tests/test.py|. Due to the costly validation against Z3 in many of these tests, they are best ran individually from the root directory. \\
+\verb|python -m unittest tests.test.Operations.test_mul| runs a number of individual regression tests and then validates the floatsmt multiplication for half-floats against Z3.
 
 \section{Project structure}
 % TODO: superficially explain the different components of the library (sorts, operations, packing etc.) and the file/module organization. shortly explain api.py and its relation to the other stuff so we don't need to explain api.py later.
