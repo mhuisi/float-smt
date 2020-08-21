@@ -197,15 +197,45 @@ Finally, when performing operations with arbitrary bit widths, it occurs frequen
 \begin{align*}
 2^{n + k} - 2^n &> \texttt{added} \iff \\
 2^n \cdot (2^k - 1) &> \texttt{added} \iff \\
-k &= \lfloor \log_2(\frac{\texttt{added}}{2^n} + 1) \rfloor + 1.
+k &= \left\lfloor \log_2\left(\frac{\texttt{added}}{2^n} + 1\right) \right\rfloor + 1.
 \end{align*}
 Sometimes it is useful to offset the amount of added bits, using $k + \texttt{offset}$ for padding instead.
 
 The different predicates are implemented as straight-forward logical expressions according to the IEEE 754 standard. We support bitwise equality with \verb|eq_bitwise|, predicates like \verb|is_nan| to query the state of a float and the typical relations like floating point equality via \verb|eq|, \verb|lt|, \verb|lte| and so on.
 
 \subsection{Pre- and postprocessing}
-% TODO: packing.py
+% packing.py
+Floats are pre-processed before each operation and the result of the operation is post-processed to produce the final float. The three-step process roughly works like the following:
+\begin{enumerate}
+	\item Every input float $(s, m, e)$ is unpacked. The implicit leading $1$ of the mantissa is prepended to $m$ if the float is normal and an implicit leading $0$ is prepended if it is subnormal. This way, both normals and subnormals can be handled in a uniform way in operations. Similarly, the $0$-exponent of floats is only used for identifying subnormals, while the real exponent is $1$. Hence, we set the exponent to $1$ during unpacking to allow for a uniform treatment of normals and subnormals. The bias $2^{E-1} - 1$ is subtracted from the exponent, which helps with performing operations on exponents. For example, when adding two exponent values, one would have to subtract the bias once afterwards if the biases were not subtracted beforehand. Next, the case of the float is identified. The case is an \verb|EnumSort|, denoting whether the float is $0$, $\infty$, \verb|NaN| or an unpacked normal float. The concrete case helps with preemptively distinguishing edge cases in each operation. Finally, the exponent is given two extra bits of precision so that operations on the exponent do not overflow as easily.
+	\item First, the operation checks the case of the float and identifies the edge case of the output float. Then, the actual arithmetical operation is performed, producing an arbitrarily large exponent and a mantissa of the form $0.0\dots01x\dots xy\dots y$ with an arbitrary amount of leading zeros, $x \dots x$ representing the $M$ bits of the mantissa and $y \dots y$ representing the remainder of the operation that should be used for rounding.
+	\item The output of the operation is packed back into a proper float. This involves shifting the mantissa accordingly, adjusting the exponent, rounding with the remainder, correctly converting subnormals, identifying overflows and underflows, as well as converting output edge cases of the operation back into their float representation. Since this process is quite involved, we will describe it separately.
+\end{enumerate}
 
+We will now describe the packing-process in detail. \verb|pack| has the following signature:
+\begin{lstlisting}
+def pack(f : DatatypeRef, sort : DatatypeSortRef, 
+    rounding_mode : DatatypeRef, case : DatatypeRef) -> DatatypeRef
+\end{lstlisting}
+\verb|f| denotes the operation output that needs to be packed, \verb|sort| is the sort of the float that \verb|f| will get packed into, \verb|rounding_mode| denotes the mode with which to round using the remainder and \verb|case| is the edge case that the value falls into.
+Let $M$ and $E$ designate the bit widths of \verb|sort|, $M_{\texttt{f}}$ and $E_{\texttt{f}}$ denote the bit widths of \verb|f|, $(s, m, e)$ represent the fields of \verb|f| and $(s', m', e')$ stand for the resulting float. $m$ is of the form $0.0\dots01x\dots xy\dots y$.
+The process works as follows:
+\begin{enumerate}
+	\item The bias $2^{E-1}-1$ is added back to $e$ and both $m$ and $e$ are padded to the same bit width using \verb|match_sizes|. Let $\Delta m$ denote the amount of bits that were added to $m$ by \verb|match_sizes|.
+	\item Even after adding the bias, the exponent may still be negative in its padded form because operations may produce an exponent that is smaller than $-(2^{E-1}-1)$. This can be fine if the resulting number is subnormal, in which case there are additional leading zeros at the front of the mantissa. We set $z_+ := \max(-e + 1, 0)$ for the amount of leading zeros to be added. Then, so as to prepend the leading zeros to the mantissa, $z_+$ bits need to get shifted out to the right. In order to not lose any precision for rounding the remainder, we calculate a sticky bit over the last $z_+ + 1$ bits via $s := (m\ \&\ (2^{z_+} - 1) \neq 0)$ and set the least significant bit of the mantissa after shifting to $s$. Finally, we adjust the exponent via $e := e + z_+$, resulting in $e \geq 1$. Note that shifting the mantissa may shift out all bits in $m$.
+	\item Depending on $m$, we may also need to remove a number of leading zeros to normalize the mantissa. The amount of leading zeros after adding leading zeros but disregarding those added by \verb|match_sizes| is $z := \texttt{clz(m)} - \Delta m$. If $e > z$, we have enough space in our exponent to remove all of the leading zeros, whereas otherwise we can only remove $e - 1$ many zeros to maintain that $e \geq 1$. Hence, we set $z_- := z$ if $e > z$ and $z_- := e - 1$ otherwise for the amount of leading zeros to remove. Then, the width of the remainder bits $y \dots y$ is calculated as $R := M_{\verb|f|} - M - z_- - 1$ and the remainder $r$ extracted by shifting to the left until only $R$ bits remain. As a result of this construction, $r$ has some redundant trailing zeros, but since it will only be used for rounding, those do not need to be removed. Finally, the mantissa is shifted to the left by $z_-$ bits and the bits in the range $[M_f-1-M, M_f-2] \subseteq \mathbb{N}$ are extracted from $m$ to yield $m'$.
+	\item Next, $m'$ is rounded using $s$, $r$ and the provided rounding mode. This may overflow the mantissa into a mantissa that only consists of zeros. If it does, the overflowed mantissa already has the correct value with $0$ after we set $e := e + 1$.
+	\item Further, we test whether the resulting float is normal, i.e. whether $e > z$. If it is, we can use $e' := e - z$ for our exponent, otherwise we use $e' := 0$ to signal that the float is a subnormal. If the float is subnormal and $m' = 0$, we know that the operation underflowed. If $e \geq 2^E - 1$, we know that the operation overflowed. Unfortunately, this is not enough to determine whether we should set the resulting float to $\infty$: Using the \verb|Truncate| rounding mode, the \verb|Up| rounding mode on negative numbers or the \verb|Down| rounding mode on positive numbers, the float always needs to be rounded to the nearest representable float instead of overflowing. In any of these cases, we set the float to the nearest representable float. In the case of an underflow, it is set to $0$, and in the case of a regular overflow it is set to $\infty$. Outside of these edge cases, we extract the lower $E$ bits from $e'$.
+	\item Finally, we check \verb|case| and yield the corresponding result. If the \verb|case| is an unpacked normal, we return the result from the previous steps.
+\end{enumerate}
+
+Using \verb|unpack| and \verb|pack|, we can also convert a float to a different floating point sort. The corresponding function has the following signature:
+\begin{lstlisting}
+def convert_float(a : DatatypeRef, new_sort : DatatypeSortRef, 
+    rm : RoundingMode) -> DatatypeRef
+\end{lstlisting}
+Thanks to \verb|unpack| and \verb|pack|, the implementation of \verb|convert_float| is straight-forward: \verb|a| is unpacked and then packed into \verb|new_sort|. Unfortunately, if the sort of \verb|a| is smaller than \verb|new_sort|, adding the bias at the start of \verb|pack| may overflow the exponent. To resolve this, both the mantissa and the exponent of \verb|a| are padded to the sizes specified in \verb|new_sort|. The exponent is padded to the left, while the mantissa, which represents a couple of decimals, is padded to the right.
+Then, we can unpack and pack to finish the conversion.
 \subsection{Operations}
 % TODO: operations.py
 
