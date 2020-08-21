@@ -39,6 +39,8 @@
 
 \hideLIPIcs 
 
+\lstset{language=Python}
+
 \begin{document}
 
 \maketitle
@@ -81,7 +83,7 @@ floatsmt is a Python library for the Z3 Python interface ``z3py''.
 
 \subsection{Usage}
 What follows is a code snippet to show how the library is used.
-\begin{lstlisting}[language=Python]
+\begin{lstlisting}
 from floatsmt.api import *
 
 # Sets the rounding mode globally.
@@ -148,15 +150,44 @@ Let us now explain the purpose of each file in the directory structure.
 	\item \verb|predicates.py|: Contains predicates that take floats and produce booleans, like $>=$ or $==$.
 	\item \verb|sorts.py|: Implements the floating point sort and a sort for the rounding mode.
 	\item \verb|utils.py|: Provides several utility functions, like a function to count leading zeros and several helper functions to ensure that bit vector operations always take arguments of the same width and never overflow when using arbitrary bit width floats.
-	 
 \end{itemize}
 
 
 \section{Implementation details}
 % TODO: briefly note which functions were implemented and go into detail for interesting functions. explain how interesting functions were implemented, but also why certain design decisions were made.
+This section will explain some design decisions and the implementation of all non-trivial functions in floatsmt.
 
 \subsection{Sorts and constructors}
-% TODO: sorts.py, constructors.py, converter.py
+% sorts.py, constructors.py, converter.py
+We use a Z3 \verb|DatatypeSort| as sort for our floats. Z3 datatypes provide similar capabilities as algebraic datatypes in other programming languages, and hence allow for multiple constructors, where each constructor stores a number of arguments. Our sort has the following signature:
+\begin{lstlisting}
+def FloatSort(mantissa_size : int, exponent_size : int) 
+    -> DatatypeSortRef
+\end{lstlisting}
+We use a datatype with a single constructor \verb|mk| that takes three parameters: \verb|sign|, which is a bit vector with a singleton bit width, \verb|mantissa|, which designates a bit vector of the provided mantissa size and finally \verb|exponent|, which also represents a bit vector of a specified size. Z3 tuples are practically the same thing as datatypes with a single constructor, but the fields of a tuple are not named, and hence we chose datatypes for improved readability instead.
+Since we also need to handle the different rounding modes within our Z3 theory, we define a Z3 \verb|EnumSort| that encapsulates the different cases.
+For simplicity, we restrict the domains of all operations to floats with equal domains, and define a utility function \verb|ensure_eq_sort(a : DatatypeRef, b : DatatypeRef)| to enforce that invariant and throw an exception otherwise.
+
+Most of the constructors are relatively straight-forward, essentially only invoking \verb|mk| before doing some small setup work. The three most fundamental constructors are the following:
+\begin{lstlisting}
+def FloatConst(name : str, mantissa_size : int, exponent_size : int) 
+    -> DatatypeRef
+def FloatVar(sign : BitVecRef, mantissa : BitVecRef, 
+    exponent : BitVecRef, sort : DatatypeSortRef) -> DatatypeRef
+def FloatVal(sign : int, mantissa : int, exponent : int, 
+    sort : DatatypeSortRef) -> DatatypeRef
+\end{lstlisting}
+\verb|FloatVal| takes Python integers, while \verb|FloatVar| takes bit vectors as parameters.
+All the other constructors are built on top of these three constructors. For instance, there is a constructor \verb|FloatVarBV| that takes a bit vector representation of a float and produces a floatsmt float, or a constructor \verb|FloatValPosInf| that creates a float representing $+\infty$.
+One of the constructors is more involved: \verb|FloatValDec| takes a string representation of a float in decimal scientific notation and a rounding mode for rounding the decimal float to a binary float. In order to process the string parameter into a float, two steps are necessary: First, the float is parsed into a decimal float value of the form $m \cdot 10^e$. Second, the decimal float value is converted into a binary float of the form $m' \cdot 2^{e'}$. Since this conversion is not exact, it needs to be rounded in the process. The parsing is implemented with a regular manual lexer. The conversion is more complicated, since great care must be taken to accurately round the binary float without error. The conversion executes the following steps using Python's big integers:
+\begin{enumerate}
+	\item The float is normalized: $e$ is incremented and $m$ divided by $10$ until $10 \nmid m$. This way, trailing zeros in $m$ are moved to $e$.
+	\item A tuple $(a, b)$ is created that represents the fraction $(a := m) / (10^{-e} =: b)$ if $e < 0$ and $(a := m \cdot 10^e) / (1 =: b)$ otherwise. It will later be used to determine the mantissa of the binary float and the remainder of the division for rounding.
+	\item $\lfloor a / b \rfloor$ is scaled into the range $[2^M, 2^{M+1}) \subseteq \mathbb{N}$, where $M$ is the mantissa bit width of the resulting binary float and $[2^M, 2^{M+1})$ is the range that the mantissa needs to be in so that it is normalized. The fraction is scaled by either successively multiplying $a$ by $2$ if $\lfloor a / b \rfloor < 2^M$ or by multiplying $b$ by $2$ if $\lfloor a / b \rfloor \geq 2^{M+1}$. If $a'$ and $b'$ are the new numerator and denominator values, the amount of multiplication steps is tracked in a variable $c$ such that $a' / b' = 2^{-c} \cdot a / b$. This allows us to later adjust the exponent $e' := 2^{E-1}-1 + M + c$ accordingly, where $E$ denotes the exponent bit width, $2^{E-1}-1$ is the bias of the exponent and $M$ is added so that all mantissa bits are moved behind the decimal point. If we reach $e' \leq 0$ during scaling up, i.e. the float is subnormal, we re-adjust by scaling down only one step so that the exponent denotes a normal float. Subnormality will be handled later via the mantissa instead.
+	\item $s := \lfloor a / b \rfloor$ and $r := a \text{ mod } b$ are evaluated, where $s$ denotes the significant and $r$ denotes the remainder. Using $r$, we increment $s$ according to the provided rounding mode. Rounding may yield $s = 2^{M+1}$, so if that occurs we set $s := 2^M$ and $c := c + 1$ and thus re-normalize the rounded $s$ into $[2^M, 2^{M+1})$.
+	\item The mantissa $m'$ is set to be the binary representation of $s$. If $m'$ has less than $M$ bits, it must be subnormal, and hence we set $e' := 0$. Otherwise, we set $e'$ to be the binary representation of $2^{E-1}-1 + M + c$. If $e' = 2^E - 1$ or it has more than $E$ bits, the resulting float is too large to be represented by a float with $(M, E)$ bits and both $m'$ and $e'$ are set to the representation of $\infty$ to designate the overflow.
+	\item Finally, we simply take the sign bit of the original decimal float.
+\end{enumerate}
 
 \subsection{Utilities and predicates}
 % TODO: utils.py, conversions.py, predicates.py
