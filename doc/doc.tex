@@ -190,7 +190,18 @@ One of the constructors is more involved: \verb|FloatValDec| takes a string repr
 \end{enumerate}
 
 \subsection{Utilities and predicates}
-% TODO: utils.py, conversions.py, predicates.py
+% utils.py, predicates.py
+In order to implement the arithmetical operations, we need a few utility functions. The first is a function \verb|clz(v : BitVecRef) -> BitVecRef| that computes the amount of leading zeros for a bit vector \verb|v| of size \verb|s| and can be understood as $\texttt{clz(v)} = \lfloor \log_2(\texttt{s}) \rfloor$. \verb|clz| progressively shifts \verb|v| to the right until no bits set to $1$ remain and then sums up the amount of remaining zeros. 
+Bit vector functions also always require both arguments to have the same bit width, and hence we provide a function \verb|match_sizes| that takes a list of bit vectors and pads each one to the maximum width of a bit vector in the list. If the bit vector is unsigned, zeros are added to the left of the bit vector for padding. If it is signed, we add sign bits to the left instead.
+Finally, when performing operations with arbitrary bit widths, it occurs frequently that an addition of the form $a + b$ can overflow. To remedy this, we implement a function \verb|guarantee_space(value, added, signed, offset)| that pads \verb|value| by enough bits so that $\texttt{value} + \texttt{added}$ cannot overflow. If $n$ is the bit width of \verb|value|, in the worst case we need to guarantee that $2^n + \texttt{added}$ does not overflow, i.e. we need to find a $k$ such that
+\begin{align*}
+2^{n + k} - 2^n &> \texttt{added} \iff \\
+2^n \cdot (2^k - 1) &> \texttt{added} \iff \\
+k &= \lfloor \log_2(\frac{\texttt{added}}{2^n} + 1) \rfloor + 1.
+\end{align*}
+Sometimes it is useful to offset the amount of added bits, using $k + \texttt{offset}$ for padding instead.
+
+The different predicates are implemented as straight-forward logical expressions according to the IEEE 754 standard. We support bitwise equality with \verb|eq_bitwise|, predicates like \verb|is_nan| to query the state of a float and the typical relations like floating point equality via \verb|eq|, \verb|lt|, \verb|lte| and so on.
 
 \subsection{Pre- and postprocessing}
 % TODO: packing.py
