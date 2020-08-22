@@ -189,10 +189,10 @@ def __int_div(a : DatatypeRef, b : DatatypeRef, result_sort : DatatypeSortRef):
     # this is kind of tricky: we want exponent + m to not overflow.
     # if we increase exponent, we need to increase m too (due to match_sizes), hence there's a recursion.
     # but it turns out that if k bits are enough for exponent + m to not overflow,
-    # k + 1 bits are enough for exponent + m + k to not overflow!
-    # after calling guarantee_space, we have that m <= 2**(e+k)-2**e.
+    # k + 1 bits are enough for exponent + m + k + 1 to not overflow!
+    # after calling guarantee_space, we have that m < 2**(e+k)-2**e.
     # additionally one can see that k <= 2**(e+k)-2**e = 2**e*(2**k-1).
-    # it follows that m+k <= 2**(e+1+k)-2**(e+1) = 2*(2**(e+k)-2**e).
+    # it follows that m+k+1 < 2**(e+1+k)-2**(e+1) = 2*(2**(e+k)-2**e) <= 2**(e+1+k)-2**e.
     exponent = guarantee_space(exponent, mantissa.size(), True, 1)
     mantissa, exponent = match_sizes([(mantissa, False), (exponent, True)])
 
