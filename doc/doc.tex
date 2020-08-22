@@ -288,7 +288,7 @@ Our testing methodology relies on verification against Z3 floats, using Z3 itsel
 
 We will henceforth denote a floating point sort with mantissa width $m$ and exponent width $e$ as $(m, e)$. In total, we tested and verified our code to the following degree:
 \begin{itemize}
-	\item The conversions from and to Z3 have been validated for inverseness of each other.
+	\item The conversions from and to Z3 have been validated to be inverse to each other.
 	\item All predicates have been tested for correctness in their edge cases.
 	\item Float equality has been tested in its edge cases.
 	\item The $>$ relation has been validated against Z3 for $(23, 8)$ floats.
