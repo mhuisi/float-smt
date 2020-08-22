@@ -246,10 +246,18 @@ Here we will explain the more interesting operations in detail. First, each oper
 \subsubsection{Multiplication}
 Thanks to \verb|unpack| and \verb|pack|, the implementation of \verb|mul| is fairly straight-forward. First, both arguments are unpacked and the output edge case is identified. 
 Let $M$ and $E$ denote the bit widths of both mantissas and both exponents after unpacking.
-Both mantissas are extended by $M$ bits, since the multiplication of two mantissas of size $M$ can yield a mantissa of size $2M$ in the worst case. Then, the mantissas, each representing a number $x.x\dots x$, are multiplied. This multiplication yields a number $xx.x\dots x$. We add the exponents and increment the resulting exponent, since \verb|pack| takes a number $x.x \dots x$ and incrementing the exponent normalizes the mantissa into that form. Formally, this process works because $(m_1.m_1 \dots m_1 \cdot 2^{e_1})(m_2.m_2 \dots m_2 \cdot 2^{e_2}) = (m_1.m_1 \dots m_1 \cdot m_2.m_2 \dots m_2) \cdot 2^{e_1 + e_2}$. Finally, the output sign is the xor of the two input signs, and we can call \verb|pack|.
+Both mantissas are extended by $M$ bits to the left, since the multiplication of two mantissas of size $M$ can yield a mantissa of size $2M$ in the worst case. Then, the mantissas, each representing a number $x.x\dots x$, are multiplied. This multiplication yields a number $xx.x\dots x$. We add the exponents and increment the resulting exponent, since \verb|pack| takes a number $x.x \dots x$ and incrementing the exponent normalizes the mantissa into that form. Adding the exponents cannot overflow, since we added two extra bits of precision to the exponent in \verb|unpack|. Formally, this process works because $(m_1 \cdot 2^{e_1})(m_2 \cdot 2^{e_2}) = (m_1 \cdot m_2) \cdot 2^{e_1 + e_2}$. Finally, the output sign is the xor of the two input signs, and we can call \verb|pack| to handle the rest.
 
 \subsubsection{Division}
-% TODO: Marc
+Division is somewhat more involved. Once again, we first identify the output edge case and unpack the inputs. Let $M$ and $E$ denote the corresponding bit widths and both $(s_1, m_1, e_1)$ and $(s_2, m_2, e_2)$ represent the floats after unpacking. $(s', m', e')$ denotes the resulting float. In the following description, one should keep in mind that $(m_1 \cdot 2^{e_1}) / (m_2 \cdot 2^{e_2}) = (m_1 / m_2) \cdot 2^{e_1 - e_2}$.
+Division then performs the following steps:
+\begin{enumerate}
+	\item Ideally, we would like to use the bit vector division and remainder operations to calculate the new mantissa and its remainder to round with. To achieve this, we pad $m_1$ to the right and $m_2$ to the left by $\Delta$ bits, gaining us $\Delta$ extra bits of precision when using bit vector division. If $m_1 = m_2$, we may need to shift $M$ bits to normalize the resulting $m_1 / m_2 = 1$ during \verb|pack|, so we need at least $M$ bits of additional precision in order to not lose all those extra decimal points that we need to represent in the mantissa. In the worst case however, $m_1$ is a subnormal and very small, while $m_2$ is very large, so we may even need $2M$ bits of additional precision to ensure that we have enough bits to fill the mantissa during normalization. We use a guard and a sticky bit for rounding correctly. The sticky bit will be determined later through the remainder, while the guard bit will be a by-product of the bit vector division. Hence, we set $\Delta := 2M + 1$.
+	\item The divison is performed on the padded mantissas, yielding a quotient $q$ and a remainder $r$. The sticky bit is obtained via $s := r \neq 0$.
+	\item $m'$ is finalized by appending $s$ to the right of $q$. We also set $e' := e_1 - e_2 + M - 1$, where $M - 1$ is added because the result of the division has $M$ leading digits. Before adding $M - 1$, we also need to ensure that the addition does not overflow, which is why we use \verb|guarantee_space| beforehand.
+	\item The resulting sign bit is obtained via $s' := s_1 \oplus s_2$.
+\end{enumerate}
+Finally, we call \verb|pack| with $(s', m', e')$, finishing the operation.
 
 \subsubsection{Fused Multiply-Add}
 % TODO: Felix
