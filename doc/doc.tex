@@ -237,16 +237,38 @@ def convert_float(a : DatatypeRef, new_sort : DatatypeSortRef,
 Thanks to \verb|unpack| and \verb|pack|, the implementation of \verb|convert_float| is straight-forward: \verb|a| is unpacked and then packed into \verb|new_sort|. Unfortunately, if the sort of \verb|a| is smaller than \verb|new_sort|, adding the bias at the start of \verb|pack| may overflow the exponent. To resolve this, both the mantissa and the exponent of \verb|a| are padded to the sizes specified in \verb|new_sort|. The exponent is padded to the left, while the mantissa, which represents a couple of decimals, is padded to the right.
 Then, we can unpack and pack to finish the conversion.
 \subsection{Operations}
-% TODO: operations.py
+% operations.py
+Here we will explain the more interesting operations in detail. Aside from the operations described individually below, floatsmt also provides \verb|abs|, \verb|neg|, \verb|min_float| and \verb|max_float| operations. The implementation of these is straight-forward as specified in the standard, with the small exception that the IEEE 754 standard does not specify the result of $\min(-0, +0)$, $\max(+0, -0)$, etc. This results in a small disparity between Z3 floats and floatsmt floats: Z3 does not reduce terms of the above form, while we assume $-0 < +0$ for the purpose of $\min$ and $\max$.
+
+\subsubsection{Addition}
+% TODO: Felix
+
+\subsubsection{Multiplication}
+% TODO: Marc
+
+\subsubsection{Division}
+% TODO: Marc
+
+\subsubsection{Fused Multiply-Add}
+% TODO: Felix
+
+\subsubsection{Remainder}
+% TODO: Marc
+
+\subsubsection{Square root}
+% TODO: Felix
 
 \section{Testing methodology}
 % TODO: explain what was tested in test.py and how
+% TODO: Marc
 
 \section{Experimental evaluation}
 % TODO: evaluate our solver against z3 (and others?) and explain why it performs terribly and how one might improve it
+% TODO: Felix
 
 \section{Conclusion}
 % TODO: summarize the project and evaluate the outcome, putting emphasis on the correctness verified against z3
+% TODO: Marc
 
 \bibliography{doc}
 
