@@ -277,14 +277,29 @@ We will now describe the process for the integer division. Let $f_1$ and $f_2$ d
 	\item $i$ is again shifted to the left by $R$ bits, producing $m'$, and $e' := e'' + d''$ is set so that the normalization by \verb|pack| produces the correct value. $d'' \leq M''$ and our \verb|guarantee_space| call guarantee that this does not overflow the exponent.
 	\item Finally, $(s'', m', e')$ is packed with the round tie to nearest rounding mode.
 \end{enumerate}
-Note that despite the fact that we add $M'' > M$ to $e''$ in the worst case in step 6, the sort that we determine in \verb|rem| is still sufficient to prevent overflows in \verb|pack|: $i$ has an extra $M'' - M$ leading zeros, which \verb|pack| removes during normalization, subtracting $M'' - M$ again and yielding at most the offset we determined earlier. 
+Note that despite the fact that we add $M'' > M$ to $e''$ in the worst case in step 6, the sort that we determine in \verb|rem| is still sufficient to prevent overflows in \verb|pack| during the integer division: $i$ has an extra $M'' - M$ leading zeros, which \verb|pack| removes during normalization, subtracting $M'' - M$ again and yielding at most the offset we determined earlier. 
 
 \subsubsection{Square root}
 % TODO: Felix
 
 \section{Testing methodology}
-% TODO: explain what was tested in test.py and how
-% TODO: Marc
+Our testing methodology relies on verification against Z3 floats, using Z3 itself. During the development of floatsmt, we wrote the corresponding code and then implemented a validation call that uses Z3 to check whether the formula $\texttt{floatsmt\_output} = \texttt{z3\_output}$ is valid for all floats of a specific size. To compare the outputs, we convert our output to a Z3 float and then use bitwise equality to ensure that the results are equal. The validity check for a formula $F$ is a straight-forward satisfiability check of $\text{Not}(F)$. If $F$ is not valid, Z3 produces a counter-example, which we can then use to analyze our code. Additionally, for each counter-example, we added a regression test to our test code base. Trivial operations were only tested with a list of hand-crafted test cases.
+
+We will henceforth denote a floating point sort with mantissa width $m$ and exponent width $e$ as $(m, e)$. In total, we tested and verified our code to the following degree:
+\begin{itemize}
+	\item The conversions from and to Z3 have been validated for inverseness of each other.
+	\item All predicates have been tested for correctness in their edge cases.
+	\item Float equality has been tested in its edge cases.
+	\item The $>$ relation has been validated against Z3 for $(23, 8)$ floats.
+	\item \verb|abs| and \verb|neg| have been tested in their edge cases.
+	\item \verb|add|, \verb|mul| and \verb|div| have been validated against Z3 for all rounding modes and $(10, 5)$ floats.
+	\item \verb|rem| has been validated against Z3 for roughly 20 hours on $(5, 3)$ floats and then stopped before completing the validation of the first rounding mode.
+	\item \verb|sqrt| has been tested in numerous cases but eventually fails during validation on $(5, 3)$.
+	\item \verb|fma| has been extensively tested but eventually fails during validation on $(5, 3)$ with a counter-example that cannot be reproduced in a regression test.
+	\item \verb|min_float| and \verb|max_float| have been validated against Z3 on $(10, 5)$ floats, only yielding a disparity in the case where the IEEE 754 standard is not definite.
+	\item \verb|pack| and \verb|unpack| have been validated to be inverse to each other on $(10, 5)$ and later $(5, 5)$ floats.
+	\item \verb|convert_float| has been validated against Z3 for all possible options from $\{(10, 5), (23, 8), (52, 11)\}$.
+\end{itemize}
 
 \section{Experimental evaluation}
 % TODO: evaluate our solver against z3 (and others?) and explain why it performs terribly and how one might improve it
