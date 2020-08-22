@@ -66,7 +66,7 @@ To combat these complexities, verification tools like SMT solvers have recently 
 
 But who watches the watchmen? How do we guarantee that the SMT solver implementation of the floating point theory is itself correct? After all, such an SMT solver implementation needs to surpass the same complexities as other floating point implementations.
 
-To help reduce this uncertainty in the sense of ``trust, but verify'', we implemented floatsmt, a floating point theory for the Z3 SMT solver \cite{z3}. floatsmt was implemented from scratch, not based on any reference implementation and then verified against Z3's own floating point theory. In our verification, we found no bugs in Z3's theory, gaining a significant amount of trust in the floating point theory of Z3 in the process. This report details our decisions for the design and implementation of floatsmt.
+To help reduce this uncertainty, we implemented floatsmt, a floating point theory for the Z3 SMT solver \cite{z3}. floatsmt was implemented from scratch, not based on any reference implementation and then verified against Z3's own floating point theory. In our verification, we found no bugs in Z3's theory, gaining a significant amount of trust in the floating point theory of Z3 in the process. This report details our decisions for the design and implementation of floatsmt.
 
 \section{Usage instructions}
 floatsmt is a Python library for the Z3 Python interface ``z3py''.
