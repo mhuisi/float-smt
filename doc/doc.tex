@@ -49,7 +49,7 @@
 This report documents the floatsmt library, which implements a floating point theory using the Z3 SMT solver. 
 \end{abstract}
 
-% Use \autoref for references and lstlisting for code.
+% Use \cref for references and lstlisting for code.
 
 \section{Introduction}
 The IEEE 754 floating point standard \cite{ieee} is complex. Manually ensuring the correctness of programs that use floating point operations requires great care: 
@@ -238,7 +238,7 @@ Thanks to \verb|unpack| and \verb|pack|, the implementation of \verb|convert_flo
 Then, we can unpack and pack to finish the conversion.
 \subsection{Operations}
 % operations.py
-Here we will explain the more interesting operations in detail. The following descriptions are notably informal and intended to be read together with the source code. First, each operation enforces that the bit widths of all parameters are equal. Aside from the operations described individually below, floatsmt also provides \verb|abs|, \verb|neg|, \verb|min_float| and \verb|max_float| operations. The implementation of these is straight-forward as specified in the standard, with the small exception that the IEEE 754 standard does not specify the result of $\min(-0, +0)$, $\max(+0, -0)$, etc. This results in a small disparity between Z3 floats and floatsmt floats: Z3 does not reduce terms of the above form, while we assume $-0 < +0$ for the purpose of $\min$ and $\max$.
+Here we will explain the more interesting operations in detail. The following descriptions are notably informal and intended to be read together with the source code. First, each operation enforces that the bit widths of all parameters are equal. Aside from the operations described individually below, floatsmt also provides \verb|abs|, \verb|neg|, \verb|min_float| and \verb|max_float| operations. The implementation of these is straight-forward as specified in the standard, with the small exception that the IEEE 754 standard does not specify the result of $\min(-0, +0)$, $\max(+0, -0)$, etc. This results in a small disparity between Z3 floats and floatsmt floats: Z3 does not reduce terms of the above form, while we assume $-0 < +0$ for the purpose of $\min$ and $\max$. Z3's \verb|roundToIntegral| is notably missing from the operations implemented by floatsmt for lack of time. A working implementation of \verb|roundToIntegral| could be extracted from the implementation of integer division in \cref{rem}.
 
 \subsubsection{Addition}
 % TODO: Felix
@@ -263,6 +263,7 @@ Finally, we call \verb|pack| with $(s', m', e')$, finishing the operation.
 % TODO: Felix
 
 \subsubsection{Remainder}
+\label{rem}
 The IEEE 754 remainder operation takes no rounding mode. For parameters $a$ and $b$ it roughly calculates $r := a - b \cdot (a / b)$, where $a / b$ is an integer division that rounds to the nearest integer using the nearest tie to even rounding mode and no additional rounding occurs in the intermediate operations. Only the result $r$ is rounded via the nearest tie to even rounding mode to the nearest representable float. Note that this may yield strange results, e.g. $6 \text{ rem } 4 = -2$.
 
 In order to implement \verb|rem|, we first need to perform an integer division and then use \verb|fma| to perform the intermediate operations. Before executing the integer division, both inputs are unpacked and the result case is identified. Then, we preemptively need to ensure that the integer division does not overflow when packing: As we will see later, similar to \verb|div|, the exponent may get doubled and at most the mantissa bit width of the inputs is added to the exponent. Hence, we do not want the integer division to pack into our original sort, but instead an intermediate sort with an extra $1 + n$ bits, where $n$ is the amount of bits that \verb|guarantee_space| would suggest to add for the addition of $2^{e+1}$ and the mantissa bit width. This way, we do not run into any intermediate overflows during \verb|pack| calls. Similarly, to execute \verb|fma|, both inputs \verb|a| and \verb|b| need to get embedded into that same larger sort, which is done without loss of precision using \verb|convert_float|. Finally, the result of \verb|fma| is packed back into the smaller sort using \verb|convert_float| again, this time rounding in the process.
@@ -298,7 +299,7 @@ We will henceforth denote a floating point sort with mantissa width $m$ and expo
 	\item \verb|fma| has been extensively tested but eventually fails during validation on $(5, 3)$ with a counter-example that cannot be reproduced in a regression test.
 	\item \verb|min_float| and \verb|max_float| have been validated against Z3 on $(10, 5)$ floats, only yielding a disparity in the case where the IEEE 754 standard is not definite.
 	\item \verb|pack| and \verb|unpack| have been validated to be inverse to each other on $(10, 5)$ and later $(5, 5)$ floats.
-	\item \verb|convert_float| has been validated against Z3 for all possible options from $\{(10, 5), (23, 8), (52, 11)\}$.
+	\item \verb|convert_float| has been validated against Z3 for all possible options from \\ $\{(10, 5), (23, 8), (52, 11)\}$.
 \end{itemize}
 
 \section{Experimental evaluation}
@@ -306,8 +307,7 @@ We will henceforth denote a floating point sort with mantissa width $m$ and expo
 % TODO: Felix
 
 \section{Conclusion}
-% TODO: summarize the project and evaluate the outcome, putting emphasis on the correctness verified against z3
-% TODO: Marc
+While floatsmt did not end up being particularly efficient, it completes the task that it was created for: Ensuring that Z3's floating point theory is standard-conform and correct. With the exception of \verb|roundToIntegral|, all operations that are present in Z3's floating point theory were implemented in floatsmt and either tested extensively or validated against Z3. While a few of these validations could not be completed for performance reasons, we are confident that the performance issues and minor disparities can be repaired without too much effort. Finally, we believe that both this document and the codebase of floatsmt itself provide a useful and detailed reference to help with accurately and correctly implementing the floating point standard over bit vectors.
 
 \bibliography{doc}
 
