@@ -67,7 +67,7 @@ def round(sign : DatatypeRef, val : DatatypeRef, remainder : DatatypeRef, roundi
     return val, overflow
 
 def pack(f : DatatypeRef, sort : DatatypeSortRef, rounding_mode : DatatypeRef = Truncate, case : DatatypeRef = unpacked_normal_case) -> DatatypeRef:
-    # the mantissa of f is of the form 0...01x...xy...y, where 1x...x are the first m bits of the mantissa (m is the mantissa size in sort),
+    # the mantissa of f is of the form 0...01x...xy...y, where x...x are the first m bits of the mantissa (m is the mantissa size in sort),
     # and y...y is the remainder.
     s = get_sort(f)
     m_old, e_old = sizes(s)
