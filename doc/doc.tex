@@ -60,7 +60,7 @@ The IEEE 754 floating point standard \cite{ieee} is complex. Manually ensuring t
 \end{itemize}
 Aside from these issues, floating point operations can always be understood in terms of their semantics, where a float is mapped to its real number value, the corresponding operation is performed over the reals and the result is rounded and mapped back to the floating point numbers.
 
-Unfortunately, implementations of the floating point standard cannot easily and efficiently perform operations on the real numbers. Hence, implementations need to perform operations on floats using bit vectors and ensure that the result is still rounded correctly. This is even more error-prone than the semantical view of floats that users of these implementations work with, and very costly if erroneous\footnote{See \url{https://web.archive.org/web/20190618044444/http://www.trnicely.net/pentbug/pentbug.html} for an infamous example}. 
+Unfortunately, implementations of the floating point standard cannot easily and efficiently perform operations on the real numbers. Hence, implementations need to perform operations on floats using bit vectors and ensure that the result is still rounded correctly. This is even more error-prone than the semantic view of floats that users of these implementations work with, and very costly if erroneous\footnote{See \url{https://web.archive.org/web/20190618044444/http://www.trnicely.net/pentbug/pentbug.html} for an infamous example}. 
 
 To combat these complexities, verification tools like SMT solvers have recently begun supporting floating point theories \cite{semantics}. These theories can be used to prove properties about implementations of the floating point standard and programs that use floats, ensuring correctness in regard to these properties.
 
@@ -136,7 +136,7 @@ We will begin by outlining the conceptual structure of the library and then deta
 
 Each floating point value has an associated sort, which can roughly be understood as the type of the value. The sort contains the mantissa bit width and the exponent bit width for the floating point value. As such, floatsmt is entirely polymorphic over these widths. 
 Given a sort, there are multiple different constructors for floating point values. These enable the creation of either floats with specific Python-/Z3 values, or float constants, which can be seen as existentially-quantified free variables. All of these constructors produce Z3 values.
-Once a float value has been created, multiple operations and predicates can be used on it. The arithmetical operations are the most complex part of the library and work in multiple steps. First, both floats are pre-processed into a format that is easier to handle when calculating the result of the operations. Second, the corresponding operation is executed on the pre-processed float. Operations are fairly unrestricted in terms of how they can manipulate these preprocessed floats. Finally, the result of the operation is post-processed, where the result of the operation in the pre-processed format is converted back into a proper float.
+Once a float value has been created, multiple operations and predicates can be used on it. The arithmetical operations are the most complex part of the library and work in multiple steps. First, both floats are pre-processed into a format that is easier to handle when calculating the result of the operations. Second, the corresponding operation is executed on the pre-processed float. Operations are fairly unrestricted in terms of how they can manipulate these pre-processed floats. Finally, the result of the operation is post-processed, where the result of the operation in the pre-processed format is converted back into a proper float.
 
 Let us now explain the purpose of each file in the directory structure.
 \begin{itemize}
@@ -200,7 +200,7 @@ k &= \left\lfloor \log_2\left(\frac{\texttt{added}}{2^n} + 1\right) \right\rfloo
 \end{align*}
 Sometimes it is useful to offset the amount of added bits, using $k + \texttt{offset}$ for padding instead.
 
-The different predicates are implemented as straight-forward logical expressions according to the IEEE 754 standard. We support bitwise equality with \verb|eq_bitwise|, predicates like \verb|is_nan| to query the state of a float and the typical relations like floating point equality via \verb|eq|, \verb|lt|, \verb|lte| and so on.
+The different predicates are implemented as straight-forward logical expressions according to the IEEE 754 standard. We support bit-wise equality with \verb|eq_bitwise|, predicates like \verb|is_nan| to query the state of a float and the typical relations like floating point equality via \verb|eq|, \verb|lt|, \verb|lte| and so on.
 
 \subsection{Pre- and postprocessing}
 % packing.py
@@ -263,7 +263,7 @@ Division (\verb|div|) is somewhat more involved. Once again, we first identify t
 Division then performs the following steps:
 \begin{enumerate}
 	\item Ideally, we would like to use the bit vector division and remainder operations to calculate the new mantissa and its remainder to round with. To achieve this, we pad $m_1$ to the right and $m_2$ to the left by $\Delta$ bits, gaining us $\Delta$ extra bits of precision when using bit vector division. If $m_1 = m_2$, we may need to shift $M$ bits to normalize the resulting $m_1 / m_2 = 1$ during \verb|pack|, so we need at least $M$ bits of additional precision in order to not lose all those extra decimal points that we need to represent in the mantissa. In the worst case however, $m_1$ is a subnormal and very small, while $m_2$ is very large, so we may even need $2M$ bits of additional precision to ensure that we have enough bits to fill the mantissa during normalization. We use a guard and a sticky bit for rounding correctly. The sticky bit will be determined later through the remainder, while the guard bit will be a by-product of the bit vector division. Hence, we set $\Delta := 2M + 1$.
-	\item The divison is performed on the padded mantissas, yielding a quotient $q$ and a remainder $r$. The sticky bit is obtained via $s := r \neq 0$.
+	\item The division is performed on the padded mantissas, yielding a quotient $q$ and a remainder $r$. The sticky bit is obtained via $s := r \neq 0$.
 	\item $m'$ is finalized by appending $s$ to the right of $q$. We also set $e' := e_1 - e_2 + M - 1$, where $M - 1$ is added because the result of the division has $M$ leading digits. Before adding $M - 1$, we also need to ensure that the addition does not overflow, which is why we use \verb|guarantee_space| beforehand.
 	\item The resulting sign bit is obtained via $s' := s_1 \oplus s_2$.
 \end{enumerate}
@@ -330,7 +330,7 @@ $x$ converges to $\sqrt{a}$. For our purposes, $\sqrt{M_a} * 2$ many iterations 
 Finally there is special case handling in accordance with the standard (e.g. $sqrt(a) = NaN | a < (-0)$ or $sqrt(-0) = (-0)$).
 
 \section{Testing methodology}
-Our testing methodology relies on verification against Z3 floats, using Z3 itself. During the development of floatsmt, we wrote the corresponding code and then implemented a validation call that uses Z3 to check whether the formula $\texttt{floatsmt\_output} = \texttt{z3\_output}$ is valid for all floats of a specific size. To compare the outputs, we convert our output to a Z3 float and then use bitwise equality to ensure that the results are equal. The validity check for a formula $F$ is a straight-forward satisfiability check of $\text{Not}(F)$. If $F$ is not valid, Z3 produces a counter-example, which we can then use to analyze our code. Additionally, for each counter-example, we added a regression test to our test code base. Trivial operations were only tested with a list of hand-crafted test cases.
+Our testing methodology relies on verification against Z3 floats, using Z3 itself. During the development of floatsmt, we wrote the corresponding code and then implemented a validation call that uses Z3 to check whether the formula $\texttt{floatsmt\_output} = \texttt{z3\_output}$ is valid for all floats of a specific size. To compare the outputs, we convert our output to a Z3 float and then use bit-wise equality to ensure that the results are equal. The validity check for a formula $F$ is a straight-forward satisfiability check of $\text{Not}(F)$. If $F$ is not valid, Z3 produces a counter-example, which we can then use to analyze our code. Additionally, for each counter-example, we added a regression test to our test code base. Trivial operations were only tested with a list of hand-crafted test cases.
 
 We will henceforth denote a floating point sort with mantissa width $m$ and exponent width $e$ as $(m, e)$. In total, we tested and verified our code to the following degree:
 \begin{itemize}
@@ -353,7 +353,7 @@ Another advantage of having the Z3 implementation as a reference for comparison 
 
 In order to assess the performance of the implemented operations we did measure the time it takes to generate the Z3 expressions and the time it takes to evaluate it using the Z3 function simplify. This was done for our implementation as well as the Z3 variant of the same operation. All benchmarks were performed with Mini-Floats, Half-Precision Floats, Single-Precision Floats and Double-Precision Floats.
 
-Table \ref{tab:performance} shows the resulting execution times in mili-seconds. The Z3 results are clearly faster by multiple orders of magnitude and seem to not change with different sorts. This leads to our assumption that the main contributor for the runtime of single Z3 operations is overhead by the Python-API. Our solution does not call the Z3-Api once but often hundreds of times for a single operation which increases the time needed to define the operations dramatically.
+Table \ref{tab:performance} shows the resulting execution times in milliseconds. The Z3 results are clearly faster by multiple orders of magnitude and seem to not change with different sorts. This leads to our assumption that the main contributor for the run-time of single Z3 operations is overhead by the Python-API. Our solution does not call the Z3-API once but often hundreds of times for a single operation which increases the time needed to define the operations dramatically.
 
 As for the effort needed for solving the expressions, it gets clear, that the exponential blowup we introduce in the addition is the main influence for complexity in our implementation. All the operations which are based on the addition (FMA and there fore remainder and SQRT too) blow up in run-time as the sort uses more bits.
 
@@ -412,7 +412,7 @@ Finally, table \ref{tab:singleadditionsimplify} shows the profile of a single ca
 			& single   & 3880827    & 16417    & 9          & 7        \\
 			& double   & 2,3E+07    & 2322395  & 9          & 8       
 		\end{tabular}
-	\caption{Benchmark results floatsmt vs Z3-FP, execution-times in mili-seconds, each operation ran 100 times}
+	\caption{Benchmark results floatsmt vs Z3-FP, execution-times in millisecond, each operation ran 100 times}
 	\label{tab:performance}
 	\end{table}
 \end{center}
@@ -471,7 +471,7 @@ Finally, table \ref{tab:singleadditionsimplify} shows the profile of a single ca
 		8355    & 21      & 0       & 34      & 0       & z3.py:455(\_ctx\_from\_ast\_arg\_list)                         \\
 		...	    &...     & ... & ... &... & ...   
 	\end{tabular}
-	\caption{Profile of a single addition definition on double floats, ncalls is the number of calls, tottime the total time spend for the respecting function (without run-time of called functions), percall the tottime per call, cumtime the accumulated time of all calls of that function including the run-time of functions it calls, and percall (2) the cumtime per call}
+	\caption{Profile of a single addition definition on double floats, ncalls is the number of calls, tottime the total time spend for the respecting function (without run-time of called functions), percall the tottime per call, cumtime the accumulated time of all calls of that function including the run-time of functions it calls, and percall (2) the cumtime per call, all times in milliseconds}
 	\label{tab:singleadditiondefinition}
 \end{table}
 
@@ -504,14 +504,14 @@ Finally, table \ref{tab:singleadditionsimplify} shows the profile of a single ca
 		6      & 0       & 0       & 0       & 0       & z3core.py:1382(Check)                               \\
 		12     & 0       & 0       & 0       & 0       & z3types.py:19(from\_param)                         
 	\end{tabular}
-	\caption{Profile of a single addition simplification on double floats, ncalls is the number of calls, tottime the total time spend for the respecting function (without run-time of called functions), percall the tottime per call, cumtime the accumulated time of all calls of that function including the run-time of functions it calls, and percall (2) the cumtime per call}
+	\caption{Profile of a single addition simplification on double floats, ncalls is the number of calls, tottime the total time spend for the respecting function (without run-time of called functions), percall the tottime per call, cumtime the accumulated time of all calls of that function including the run-time of functions it calls, and percall (2) the cumtime per call, all times in milliseconds}
 	\label{tab:singleadditionsimplify}
 \end{table}
 
 
 
 \section{Conclusion}
-While floatsmt did not end up being particularly efficient, it completes the task that it was created for: Ensuring that Z3's floating point theory is standard-conform and correct. With the exception of \verb|roundToIntegral|, all operations that are present in Z3's floating point theory were implemented in floatsmt and either tested extensively or validated against Z3. While a few of these validations could not be completed for performance reasons, we are confident that the performance issues and minor disparities can be repaired without too much effort. Finally, we believe that both this document and the codebase of floatsmt itself provide a useful and detailed reference to help with accurately and correctly implementing the floating point standard over bit vectors.
+While floatsmt did not end up being particularly efficient, it completes the task that it was created for: Ensuring that Z3's floating point theory is standard-conform and correct. With the exception of \verb|roundToIntegral|, all operations that are present in Z3's floating point theory were implemented in floatsmt and either tested extensively or validated against Z3. While a few of these validations could not be completed for performance reasons, we are confident that the performance issues and minor disparities can be repaired without too much effort. Finally, we believe that both this document and the code-base of floatsmt itself provide a useful and detailed reference to help with accurately and correctly implementing the floating point standard over bit vectors.
 
 \bibliography{doc}
 
