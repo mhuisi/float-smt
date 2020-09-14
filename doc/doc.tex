@@ -16,7 +16,7 @@
 
 \title{Documentation of floatsmt}
 
-\author{Felix Griesau}{Karlsruhe Institute of Technology, Germany}{TODO}{}{}
+\author{Felix Griesau}{Karlsruhe Institute of Technology, Germany}{felix.griesau@student.kit.edu}{}{}
 \author{Marc Huisinga}{Karlsruhe Institute of Technology, Germany}{mhuisi@protonmail.com}{}{}
 
 \authorrunning{F. Griesau and M. Huisinga}
@@ -241,7 +241,17 @@ Then, we can unpack and pack to finish the conversion. Unfortunately, there is o
 Here we will explain the more interesting operations in detail. The following descriptions are notably informal and intended to be read together with the source code. First, each operation enforces that the bit widths of all parameters are equal. Aside from the operations described individually below, floatsmt also provides \verb|abs|, \verb|neg|, \verb|min_float| and \verb|max_float| operations. The implementation of these is straight-forward as specified in the standard, with the small exception that the IEEE 754 standard does not specify the result of $\min(-0, +0)$, $\max(+0, -0)$, etc. This results in a small disparity between Z3 floats and floatsmt floats: Z3 does not reduce terms of the above form, while we assume $-0 < +0$ for the purpose of $\min$ and $\max$. Z3's \verb|roundToIntegral| is notably missing from the operations implemented by floatsmt for lack of time. A working implementation of \verb|roundToIntegral| could be extracted from the implementation of integer division in \cref{rem}.
 
 \subsubsection{Addition}
-% TODO: Felix
+The addition is rather straight forward: Let $a$ and $b$ be the two floats which are to be added. Instead of handling everything twice for $a\geq b$ and $a<b$, the parameters of this function are assigned as follows: $f(a, b) \mapsto f'(x, y) | (x = a \vee y = a) \wedge (x = b \vee y = b) \wedge ((a \neq b) \rightarrow (x \neq y)) \wedge (x \geq y)$. Based on that, the implementation does some case handling in accordance to the standard using the case information from unpacking $a$ and $b$.
+
+The main calculation is performed on the two variables after denormalizing $y$ to fit the exponent of $x$. This is results in significant increases of the length of the mantissas which is the main efficiency flaw of this implementation. On the other hand, it ensures accurate and simple rounding. A possible improvement on this could be working with a sticky-bit instead. The addition itself is defined as follows: $m_r = m'_x + m'_y$ (or in case of opposite sign bits $m_r = m'_x - m'_y$), $e_r = e_x$ and $s_r = s_x$ where $m'$ are the mantissa values aligned to $e_x$. The simplified handling of $s$ and $e$ works due the 
+precondition $x \geq y$. Afterwards, the special cases of the sign-bit are applied according to the standard (if the result is zero).
+
+Finally, the handling of overflows (e.g. the exponent needing to be increased by 1), underflows and rounding is done by \verb|pack|.
+
+
+\subsubsection{Subtraction}
+$sub(a, b)$ is defined as $add(a, neg(b))$.
+
 
 \subsubsection{Multiplication}
 Thanks to \verb|unpack| and \verb|pack|, the implementation of \verb|mul| is fairly straight-forward. First, both arguments are unpacked and the output edge case is identified. 
@@ -260,7 +270,14 @@ Division then performs the following steps:
 Finally, we call \verb|pack| with $(s', m', e')$, finishing the operation.
 
 \subsubsection{Fused Multiply-Add}
-% TODO: Felix
+Fused Multiply-Add calculates the operation $(a * b) + c$ without rounding in between the steps.
+
+This implementation of FMA is based on the implementations of the multiplication and the addition. 
+But instead of packing the result back to the original sort after the multiplication, it is being packed to a sort with longer mantissas in order to avoid loosing information through rounding ("infinite precision"). To achieve this, the result of the core multiplication is not packed back to the original sort but instead to a sort without reduced precision to normalize it again.
+
+After converting the third float to the same sort, it gets added to the result of multiplication. That value then gets converted back down to the original sort. As this takes care of most of the special cases, only one has to be taken care of explicitly:
+If the multiplication overflows and the third parameter ($c$) is an infinite value with an opposite sign bit, instead of being NaN, the result is $c$, given that $a$ and $b$ were not infinite.
+
 
 \subsubsection{Remainder}
 \label{rem}
@@ -281,7 +298,36 @@ We will now describe the process for the integer division. Let $f_1$ and $f_2$ d
 Note that despite the fact that we add $M'' > M$ to $e''$ in the worst case in step 6, the sort that we determine in \verb|rem| is still sufficient to prevent overflows in \verb|pack| during the integer division: $i$ has an extra $M'' - M$ leading zeros, which \verb|pack| removes during normalization, subtracting $M'' - M$ again and yielding at most the offset we determined earlier. 
 
 \subsubsection{Square root}
-% TODO: Felix
+Instead of using the wide-spread Newton-Raphson method of computing the square root, this implementation is based on the Goldschmid method which is based on scalars instead of additions. This has the advantage of circumventing the problem of small Float values not changing a bigger value in the addition and the algorithm therefore possibly not fully converging. This could result in the value being off by a bit which is avoided in the Goldschmid method. 
+
+Another advantage is that it can also be expressed by just using FMA-operations for the iterations:
+
+Initialization:
+\[ 
+	y_0 \approx 1/a'
+\]
+\[
+	x_0 = ay_0
+\]
+\[
+	h_0 = y_0/2
+\]
+\[
+	r_0 = FMA(neg(x_0), h_0, 1/2)
+\]
+Where $a$ is the input Float and $a'$ is an approximation for $\sqrt{a}$ : $ e_{a'} = (e_a - bias) / 2 + bias$
+\[
+x_n = FMA(neg(x_n-1), h , 1/2)
+\]
+\[
+h_n = FMA(h_n-1, r_n-1)
+\]
+\[
+r_n = FMA(neg(x_n-1, h_n-1, 1/2))	
+\]
+\\
+$x$ converges to $\sqrt{a}$. For our purposes, $\sqrt{M_a} * 2$ many iterations are enough to ensure convergence.
+Finally there is special case handling in accordance with the standard (e.g. $sqrt(a) = NaN | a < (-0)$ or $sqrt(-0) = (-0)$).
 
 \section{Testing methodology}
 Our testing methodology relies on verification against Z3 floats, using Z3 itself. During the development of floatsmt, we wrote the corresponding code and then implemented a validation call that uses Z3 to check whether the formula $\texttt{floatsmt\_output} = \texttt{z3\_output}$ is valid for all floats of a specific size. To compare the outputs, we convert our output to a Z3 float and then use bitwise equality to ensure that the results are equal. The validity check for a formula $F$ is a straight-forward satisfiability check of $\text{Not}(F)$. If $F$ is not valid, Z3 produces a counter-example, which we can then use to analyze our code. Additionally, for each counter-example, we added a regression test to our test code base. Trivial operations were only tested with a list of hand-crafted test cases.
@@ -303,8 +349,166 @@ We will henceforth denote a floating point sort with mantissa width $m$ and expo
 \end{itemize}
 
 \section{Experimental evaluation}
-% TODO: evaluate our solver against z3 (and others?) and explain why it performs terribly and how one might improve it
-% TODO: Felix
+Another advantage of having the Z3 implementation as a reference for comparison is performance evaluation.
+
+In order to assess the performance of the implemented operations we did measure the time it takes to generate the Z3 expressions and the time it takes to evaluate it using the Z3 function simplify. This was done for our implementation as well as the Z3 variant of the same operation. All benchmarks were performed with Mini-Floats, Half-Precision Floats, Single-Precision Floats and Double-Precision Floats.
+
+Table \ref{tab:performance} shows the resulting execution times in mili-seconds. The Z3 results are clearly faster by multiple orders of magnitude and seem to not change with different sorts. This leads to our assumption that the main contributor for the runtime of single Z3 operations is overhead by the Python-API. Our solution does not call the Z3-Api once but often hundreds of times for a single operation which increases the time needed to define the operations dramatically.
+
+As for the effort needed for solving the expressions, it gets clear, that the exponential blowup we introduce in the addition is the main influence for complexity in our implementation. All the operations which are based on the addition (FMA and there fore remainder and SQRT too) blow up in run-time as the sort uses more bits.
+
+A possible way to improve these results would be to implement the sticky-bit handling for the addition as mentioned in the respecting section.
+
+We did not come up with a simple approach to reduce the overhead introduced by the numerous Python-API calls other than not using python and possibly implementing a standard directly into the solvers logic like the developers of Z3 did.
+
+
+In order to estimate the actual impact of the overhead and its structure, we did use the Python library cProfile. Table \ref{tab:singleadditiondefinition} shows the profile of a single definition of an addition of two double-precision floating point values. The table is sorted by the accumulated time of all calls of a specific function and all the calls it makes. It can be seen that clz (count leading zeroes) is the single function in our implementation which consumes the most time on its own. It also accumulates the biggest part of the accumulated run-time. 
+Further down the list, functions which are heavily used in clz, such as the logical shift (LShR) and conditions (If) can be spotted which accumulate a significant chunk of the run-time.
+Therefore it can be considered as one of the weak points of our implementation. It is also striking that a lot of the run time is spent on overhead within the Z3 Python API caused by the significant amount of calls to it.
+
+A few other remarks that get apparent are:
+\begin{itemize}
+	\item A lot of calls the Z3 function "sort" are made, instead of instantiating new sorts in most of the sub-functions, sorts could be handled in a more central way to avoid the overhead
+	\item Conditions seem to pile up a good part of the run-time and probably carry a lot of overhead.
+	\item Many functions are related to converting and handling Z3 types. Using the overloaded standard operators often hides away the complexity that lies beneath that syntactic convenience. Being more careful and explicit about those operations could have saved a lot of run-time.
+\end{itemize}
+
+
+Finally, table \ref{tab:singleadditionsimplify} shows the profile of a single call to simplify on an addition expression. As simplify is an Z3 function, it can be routed through the API directly to the solver which results in far reduced overhead. This can easily be seen when looking at the amount of functions and the number of times they were called. We assume that the increased run-time is mostly a result of the exponential blowup of bit-length. For the operations which do not depend on the addition, we assume differences result mainly from missing performance optimization in our implementation.
+
+
+\begin{center}	
+	\begin{table}[]
+		\begin{tabular}{ll|ll|ll}
+			&          & floatsmt  &          & z3         &          \\
+			name           & datatype & definition & simplify & definition & simplify \\ \hline
+			addition       & mini     & 18091      & 35       & 18         & 7        \\
+			& half     & 20634      & 50       & 17         & 7        \\
+			& single   & 53989      & 352      & 17         & 9        \\
+			& double   & 319762     & 38057    & 17         & 8        \\
+			&          &            &          &            &          \\
+			division       & mini     & 8517       & 21       & 16         & 7        \\
+			& half     & 9392       & 27       & 17         & 6        \\
+			& single   & 10968      & 34       & 17         & 7        \\
+			& double   & 14178      & 50       & 17         & 7        \\
+			&          &            &          &            &          \\
+			fma            & mini     & 43472      & 59       & 23         & 7        \\
+			& half     & 48205      & 83       & 24         & 7        \\
+			& single   & 87135      & 412      & 24         & 7        \\
+			& double   & 362908     & 38869    & 24         & 9        \\
+			&          &            &          &            &          \\
+			multiplication & mini     & 8167       & 20       & 16         & 6        \\
+			& half     & 8713       & 22       & 17         & 6        \\
+			& single   & 9860       & 27       & 17         & 7        \\
+			& double   & 12056      & 34       & 16         & 7        \\
+			&          &            &          &            &          \\
+			remainder      & mini     & 74562      & 131      & 17         & 8        \\
+			& half     & 87281      & 235      & 16         & 7        \\
+			& single   & 227765     & 6227     & 16         & 7        \\
+			& double   & 1319490    & 2001900  & 17         & 7        \\
+			&          &            &          &            &          \\
+			sqrt           & mini     & 616141     & 562      & 9          & 6        \\
+			& half     & 1330105    & 1949     & 9          & 6        \\
+			& single   & 3880827    & 16417    & 9          & 7        \\
+			& double   & 2,3E+07    & 2322395  & 9          & 8       
+		\end{tabular}
+	\caption{Benchmark results floatsmt vs Z3-FP, execution-times in mili-seconds, each operation ran 100 times}
+	\label{tab:performance}
+	\end{table}
+\end{center}
+
+
+\begin{table}[]
+	\begin{tabular}{lllll|l}
+		ncalls  & tottime & percall & cumtime & percall & filename:lineno(function)                                      \\ \hline
+		1       & 0       & 0       & 3014    & 3014    & operations.py:48(add)                                          \\
+		1       & 0       & 0       & 3014    & 3014    & api.py:154(add)                                                \\
+		1       & 0       & 0       & 2862    & 2862    & packing.py:69(pack)                                            \\
+		1       & 48      & 48      & 2843    & 2843    & utils.py:4(clz)                                                \\
+		33163   & 62      & 0       & 1406    & 0       & z3.py:1106(\_coerce\_exprs)                                    \\
+		8297    & 51      & 0       & 1115    & 0       & z3.py:1268(If)                                                 \\
+		66421   & 49      & 0       & 860     & 0       & z3.py:1088(\_coerce\_expr\_merge)                              \\
+		119596  & 163     & 0       & 704     & 0       & z3.py:307(\_\_init\_\_)                                        \\
+		119595  & 162     & 0       & 699     & 0       & z3.py:312(\_\_del\_\_)                                         \\
+		187200  & 122     & 0       & 624     & 0       & z3.py:513(as\_ast)                                             \\
+		49734   & 71      & 0       & 577     & 0       & z3.py:3258(sort)                                               \\
+		8255    & 23      & 0       & 571     & 0       & z3.py:3280(\_\_add\_\_)                                        \\
+		606714  & 422     & 0       & 476     & 0       & z3core.py:1382(Check)                                          \\
+		8249    & 26      & 0       & 448     & 0       & z3.py:4036(LShR)                                               \\
+		8328    & 23      & 0       & 429     & 0       & z3.py:932(\_\_eq\_\_)                                          \\
+		187200  & 241     & 0       & 423     & 0       & z3core.py:2506(Z3\_sort\_to\_ast)                              \\
+		66343   & 58      & 0       & 352     & 0       & z3.py:3228(cast)                                               \\
+		25342   & 55      & 0       & 318     & 0       & z3.py:366(eq)                                                  \\
+		8407    & 19      & 0       & 291     & 0       & z3.py:1392(cast)                                               \\
+		119595  & 155     & 0       & 271     & 0       & z3core.py:1428(Z3\_dec\_ref)                                   \\
+		119596  & 154     & 0       & 267     & 0       & z3core.py:1424(Z3\_inc\_ref)                                   \\
+		16653   & 34      & 0       & 262     & 0       & z3.py:3777(BitVecVal)                                          \\
+		67194   & 92      & 0       & 160     & 0       & z3core.py:2746(Z3\_get\_sort)                                  \\
+		304741  & 102     & 0       & 137     & 0       & z3.py:362(ctx\_ref)                                            \\
+		8508    & 24      & 0       & 123     & 0       & z3.py:1041(\_to\_expr\_ref)                                    \\
+		16653   & 84      & 0       & 121     & 0       & z3core.py:2136(Z3\_mk\_numeral)                                \\
+		1213428 & 114     & 0       & 114     & 0       & z3types.py:19(from\_param)                                     \\
+		8502    & 13      & 0       & 100     & 0       & z3.py:1426(sort)                                               \\
+		8312    & 12      & 0       & 93      & 0       & z3.py:1553(BoolSort)                                           \\
+		9       & 0       & 0       & 90      & 10      & predicates.py:14(is\_zero)                                     \\
+		709535  & 83      & 0       & 83      & 0       & z3.py:196(ref)                                                 \\
+		118     & 1       & 0       & 71      & 1       & sorts.py:25(get\_sort)                                         \\
+		18      & 0       & 0       & 69      & 4       & predicates.py:4(eq\_bitwise)                                   \\
+		25342   & 42      & 0       & 68      & 0       & z3core.py:2731(Z3\_is\_eq\_ast)                                \\
+		174886  & 44      & 0       & 64      & 0       & z3.py:1135(is\_expr)                                           \\
+		2       & 0       & 0       & 58      & 29      & predicates.py:84(gt)                                           \\
+		121     & 1       & 0       & 55      & 0       & sorts.py:10(FloatSort)                                         \\
+		2       & 0       & 0       & 54      & 27      & packing.py:8(unpack)                                           \\
+		121     & 0       & 0       & 48      & 0       & z3.py:4771(create)                                             \\
+		366207  & 46      & 0       & 46      & 0       & \{built-in method builtins.isinstance\}                        \\
+		121     & 5       & 0       & 46      & 0       & z3.py:4805(CreateDatatypes)                                    \\
+		9       & 0       & 0       & 46      & 5       & predicates.py:8(is\_pos\_zero)                                 \\
+		9       & 0       & 0       & 43      & 5       & predicates.py:11(is\_neg\_zero)                                \\
+		440383  & 41      & 0       & 41      & 0       & z3types.py:39(from\_param)                                     \\
+		36      & 0       & 0       & 40      & 1       & conversions.py:4(to\_ieee\_bv)                                 \\
+		8297    & 27      & 0       & 37      & 0       & z3core.py:1681(Z3\_mk\_ite)                                    \\
+		211     & 2       & 0       & 35      & 0       & z3.py:755(\_\_call\_\_)                                        \\
+		8355    & 21      & 0       & 34      & 0       & z3.py:455(\_ctx\_from\_ast\_arg\_list)                         \\
+		...	    &...     & ... & ... &... & ...   
+	\end{tabular}
+	\caption{Profile of a single addition definition on double floats, ncalls is the number of calls, tottime the total time spend for the respecting function (without run-time of called functions), percall the tottime per call, cumtime the accumulated time of all calls of that function including the run-time of functions it calls, and percall (2) the cumtime per call}
+	\label{tab:singleadditiondefinition}
+\end{table}
+
+
+\begin{table}[]
+	\begin{tabular}{lllll|l}
+		ncalls & tottime & percall & cumtime & percall & filename:lineno(function)                           \\ \hline
+		1      & 441     & 441     & 441     & 441     & z3core.py:2946(Z3\_simplify)                        \\
+		1      & 0       & 0       & 441     & 441     & z3.py:8205(simplify)                                \\
+		1      & 0       & 0       & 0       & 0       & z3.py:1041(\_to\_expr\_ref)                         \\
+		1      & 0       & 0       & 0       & 0       & z3core.py:2761(Z3\_get\_ast\_kind)                  \\
+		1      & 0       & 0       & 0       & 0       & z3.py:307(\_\_init\_\_)                             \\
+		1      & 0       & 0       & 0       & 0       & z3.py:1135(is\_expr)                                \\
+		1      & 0       & 0       & 0       & 0       & z3core.py:1424(Z3\_inc\_ref)                        \\
+		1      & 0       & 0       & 0       & 0       & z3core.py:2746(Z3\_get\_sort)                       \\
+		1      & 0       & 0       & 0       & 0       & z3.py:312(\_\_del\_\_)                              \\
+		1      & 0       & 0       & 0       & 0       & z3core.py:2516(Z3\_get\_sort\_kind)                 \\
+		1      & 0       & 0       & 0       & 0       & z3core.py:1428(Z3\_dec\_ref)                        \\
+		1      & 0       & 0       & 0       & 0       & z3.py:362(ctx\_ref)                                 \\
+		1      & 0       & 0       & 0       & 0       & \{method 'disable' of '\_lsprof.Profiler' objects\} \\
+		1      & 0       & 0       & 0       & 0       & z3.py:56(z3\_debug)                                 \\
+		1      & 0       & 0       & 0       & 0       & z3.py:94(\_z3\_assert)                              \\
+		1      & 0       & 0       & 0       & 0       & z3.py:231(\_get\_ctx)                               \\
+		1      & 0       & 0       & 0       & 0       & z3types.py:31(from\_param)                          \\
+		2      & 0       & 0       & 0       & 0       & \{built-in method builtins.isinstance\}             \\
+		2      & 0       & 0       & 0       & 0       & \{built-in method builtins.len\}                    \\
+		3      & 0       & 0       & 0       & 0       & z3.py:903(as\_ast)                                  \\
+		5      & 0       & 0       & 0       & 0       & z3.py:196(ref)                                      \\
+		5      & 0       & 0       & 0       & 0       & z3types.py:39(from\_param)                          \\
+		6      & 0       & 0       & 0       & 0       & z3core.py:1382(Check)                               \\
+		12     & 0       & 0       & 0       & 0       & z3types.py:19(from\_param)                         
+	\end{tabular}
+	\caption{Profile of a single addition simplification on double floats, ncalls is the number of calls, tottime the total time spend for the respecting function (without run-time of called functions), percall the tottime per call, cumtime the accumulated time of all calls of that function including the run-time of functions it calls, and percall (2) the cumtime per call}
+	\label{tab:singleadditionsimplify}
+\end{table}
+
+
 
 \section{Conclusion}
 While floatsmt did not end up being particularly efficient, it completes the task that it was created for: Ensuring that Z3's floating point theory is standard-conform and correct. With the exception of \verb|roundToIntegral|, all operations that are present in Z3's floating point theory were implemented in floatsmt and either tested extensively or validated against Z3. While a few of these validations could not be completed for performance reasons, we are confident that the performance issues and minor disparities can be repaired without too much effort. Finally, we believe that both this document and the codebase of floatsmt itself provide a useful and detailed reference to help with accurately and correctly implementing the floating point standard over bit vectors.

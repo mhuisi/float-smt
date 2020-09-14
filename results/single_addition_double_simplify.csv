@@ -1,0 +1,27 @@
+ncalls,tottime,percall,cumtime,percall,filename:lineno(function)
+1,0.441,0.441,0.441,0.441,z3core.py:2946(Z3_simplify)
+6,0.000,0.000,0.000,0.000,z3core.py:1382(Check)
+1,0.000,0.000,0.441,0.441,z3.py:8205(simplify)
+1,0.000,0.000,0.000,0.000,z3.py:1041(_to_expr_ref)
+1,0.000,0.000,0.000,0.000,z3core.py:2761(Z3_get_ast_kind)
+1,0.000,0.000,0.000,0.000,z3.py:307(__init__)
+2,0.000,0.000,0.000,0.000,{built-in method builtins.isinstance}
+1,0.000,0.000,0.000,0.000,z3.py:1135(is_expr)
+1,0.000,0.000,0.000,0.000,z3core.py:1424(Z3_inc_ref)
+1,0.000,0.000,0.000,0.000,z3core.py:2746(Z3_get_sort)
+1,0.000,0.000,0.000,0.000,z3.py:312(__del__)
+1,0.000,0.000,0.000,0.000,z3core.py:2516(Z3_get_sort_kind)
+1,0.000,0.000,0.000,0.000,z3core.py:1428(Z3_dec_ref)
+12,0.000,0.000,0.000,0.000,z3types.py:19(from_param)
+1,0.000,0.000,0.000,0.000,z3.py:362(ctx_ref)
+5,0.000,0.000,0.000,0.000,z3.py:196(ref)
+5,0.000,0.000,0.000,0.000,z3types.py:39(from_param)
+1,0.000,0.000,0.000,0.000,{method 'disable' of '_lsprof.Profiler' objects}
+3,0.000,0.000,0.000,0.000,z3.py:903(as_ast)
+2,0.000,0.000,0.000,0.000,{built-in method builtins.len}
+1,0.000,0.000,0.000,0.000,z3.py:56(z3_debug)
+1,0.000,0.000,0.000,0.000,z3.py:94(_z3_assert)
+1,0.000,0.000,0.000,0.000,z3.py:231(_get_ctx)
+1,0.000,0.000,0.000,0.000,z3types.py:31(from_param)
+
+
