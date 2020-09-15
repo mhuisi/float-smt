@@ -58,9 +58,9 @@ The IEEE 754 floating point standard \cite{ieee} is complex. Manually ensuring t
 \item Rounding errors need to be kept in check. Depending on the operation, the values and even the rounding mode involved, rounding errors may grow very large.
 \item Operations on normals and subnormals can unintentionally produce one of the above edge cases in the situation of an underflow or an overflow.
 \end{itemize}
-Aside from these issues, floating point operations can always be understood in terms of their semantics, where a float is mapped to its real number value, the corresponding operation is performed over the reals and the result is rounded and mapped back to the floating point numbers.
+Aside from these complexities, floating point operations can always be understood in terms of their semantics, where a float is mapped to its real number value, the corresponding operation is performed over the reals and the result is rounded and mapped back to the floating point numbers.
 
-Unfortunately, implementations of the floating point standard cannot easily and efficiently perform operations on the real numbers. Hence, implementations need to perform operations on floats using bit vectors and ensure that the result is still rounded correctly. This is even more error-prone than the semantic view of floats that users of these implementations work with, and very costly if erroneous\footnote{See \url{https://web.archive.org/web/20190618044444/http://www.trnicely.net/pentbug/pentbug.html} for an infamous example}. 
+Unfortunately, implementations of the floating point standard cannot easily and efficiently perform operations on the real numbers. Hence, implementations need to perform operations on floats using bit vectors and ensure that the result is still rounded correctly. This is even more error-prone than the semantic view of floats that users of these implementations work with, and very costly if erroneous\footnote{See \url{https://web.archive.org/web/20190618044444/http://www.trnicely.net/pentbug/pentbug.html} for an infamous example.}. 
 
 To combat these complexities, verification tools like SMT solvers have recently begun supporting floating point theories \cite{semantics}. These theories can be used to prove properties about implementations of the floating point standard and programs that use floats, ensuring correctness in regard to these properties.
 
@@ -115,7 +115,7 @@ print(x / y)
 
 # Constants can be created via 
 # FloatConst(name, mantissa_width, exponent_width)
-# and then used for proofs.
+# and then be used for proofs.
 x = SMTFloat.FloatConst("x", 23, 8)
 y = SMTFloat.FloatConst("y", 23, 8)
 
@@ -224,7 +224,7 @@ The process works as follows:
 	\item Even after adding the bias, the exponent may still be negative in its padded form because operations may produce an exponent that is smaller than $-(2^{E-1}-1)$. This can be fine if the resulting number is subnormal, in which case there are additional leading zeros at the front of the mantissa. We set $z_+ := \max(-e + 1, 0)$ for the amount of leading zeros to be added. Then, so as to prepend the leading zeros to the mantissa, $z_+$ bits need to get shifted out to the right. In order to not lose any precision for rounding the remainder, we calculate a sticky bit over the last $z_+ + 1$ bits via $s := (m\ \&\ (2^{z_+} - 1) \neq 0)$ and using $\lor$ with $s$ and the least significant bit of the mantissa after shifting. Finally, we adjust the exponent via $e := e + z_+$, resulting in $e \geq 1$. Note that shifting the mantissa may shift out all bits in $m$.
 	\item Depending on $m$, we may also need to remove a number of leading zeros to normalize the mantissa. The amount of leading zeros after adding leading zeros but disregarding those added by \verb|match_sizes| is $z := \texttt{clz(m)} - \Delta m$. If $e > z$, we have enough space in our exponent to remove all of the leading zeros, whereas otherwise we can only remove $e - 1$ many zeros to maintain that $e \geq 1$. Hence, we set $z_- := z$ if $e > z$ and $z_- := e - 1$ otherwise for the amount of leading zeros to remove. Then, the width of the remainder bits $y \dots y$ is calculated as $R := M_{\verb|f|} - M - z_- - 1$ and the remainder $r$ extracted by shifting to the left until only $R$ bits remain. As a result of this construction, $r$ has some redundant trailing zeros, but since it will only be used for rounding, those do not need to be removed. Finally, the mantissa is shifted to the left by $z_-$ bits and the bits in the range $[M_f-1-M, M_f-2] \subseteq \mathbb{N}$ are extracted from $m$ to yield $m'$.
 	\item Next, $m'$ is rounded using $s$, $r$ and the provided rounding mode. This may overflow the mantissa into a mantissa that only consists of zeros. If it does, the overflowed mantissa already has the correct value with $0$ after we set $e := e + 1$.
-	\item Further, we test whether the resulting float is normal, i.e. whether $e > z$. If it is, we can use $e' := e - z$ for our exponent, otherwise we use $e' := 0$ to signal that the float is a subnormal. If the float is subnormal and $m' = 0$, we know that the operation underflowed. If $e \geq 2^E - 1$, we know that the operation overflowed. Unfortunately, this is not enough to determine whether we should set the resulting float to $\infty$: Using the \verb|Truncate| rounding mode, the \verb|Up| rounding mode on negative numbers or the \verb|Down| rounding mode on positive numbers, the float always needs to be rounded to the nearest representable float instead of overflowing. In any of these cases, we set the float to the nearest representable float. In the case of an underflow, it is set to $0$, and in the case of a regular overflow it is set to $\infty$. Outside of these edge cases, we extract the lower $E$ bits from $e'$.
+	\item Further, we test whether the resulting float is normal, i.e. whether $e > z$. If it is, we can use $e' := e - z$ for our exponent, otherwise we use $e' := 0$ to signal that the float is a subnormal. If the float is subnormal and $m' = 0$, we know that the operation underflowed. If instead $e \geq 2^E - 1$, we know that the operation overflowed. Unfortunately, this is not enough to determine whether we should set the resulting float to $\infty$: Using the \verb|Truncate| rounding mode, the \verb|Up| rounding mode on negative numbers or the \verb|Down| rounding mode on positive numbers, the float always needs to be rounded to the nearest representable float instead of overflowing. In any of these cases, we set the float to the nearest representable float. In the case of an underflow, it is set to $0$, and in the case of a regular overflow it is set to $\infty$. Outside of these edge cases, we extract the lower $E$ bits from $e'$.
 	\item Finally, we check \verb|case| and yield the corresponding result. If the \verb|case| is an unpacked normal, we return the result from the previous steps. For $s'$ we can directly use $s$.
 \end{enumerate}
 
@@ -234,24 +234,22 @@ def convert_float(a : DatatypeRef, new_sort : DatatypeSortRef,
     rm : RoundingMode) -> DatatypeRef
 \end{lstlisting}
 Thanks to \verb|unpack| and \verb|pack|, the implementation of \verb|convert_float| is straight-forward: \verb|a| is unpacked and then packed into \verb|new_sort|. Unfortunately, if the sort of \verb|a| is smaller than \verb|new_sort|, adding the bias at the start of \verb|pack| may overflow the exponent. To resolve this, both the mantissa and the exponent of \verb|a| are padded to the sizes specified in \verb|new_sort|. The exponent is padded to the left, while the mantissa, which represents a couple of decimals, is padded to the right.
-Then, we can unpack and pack to finish the conversion. Unfortunately, there is one caveat to the correctness of \verb|convert_float| in our implementation: If $\texttt{a} = (s_a, m_a, e_a)$, $\texttt{b} = (s_b, m_b, e_b)$, $(M_a, E_a)$ and $(M_b, E_b)$ denote the sorts, $M_a = M_b$ or $M_a = M_b + 1$ and $E_a > E_b$ in both cases, the conversion may not work correctly, as our construction of the sticky bit in step 2 of \verb|pack| is not sufficient to round correctly for all floats of these very specific sorts. In both cases, $e_a$ needs to be sufficiently small for the conversion to fail, and in the latter case $m_a$ needs to contain a non-zero value in the least significant bit. Luckily, these cases do not occur for conversions between any of the standard sorts or in any of the operations, so the fallout of this oversight is not too bad. To fix this issue, one would have to separate remainder and mantissa already during step 2 and then ensure that the sticky bit is both only used in the remainder and always has a corresponding guard bit if mantissa bits were shifted out.
+Then, we can unpack and pack to finish the conversion. Regrettably, there is one caveat to the correctness of \verb|convert_float| in our implementation: If $\texttt{a} = (s_a, m_a, e_a)$, $\texttt{b} = (s_b, m_b, e_b)$, $(M_a, E_a)$ and $(M_b, E_b)$ denote the sorts, $M_a = M_b$ or $M_a = M_b + 1$ and $E_a > E_b$ in both cases, the conversion may not work correctly, as our construction of the sticky bit in step 2 of \verb|pack| is not sufficient to round correctly for all floats of these very specific sorts. In both cases, $e_a$ needs to be sufficiently small for the conversion to fail, and in the latter case $m_a$ needs to contain a non-zero value in the least significant bit. Luckily, these cases do not occur for conversions between any of the standard sorts or in any of the operations, so the fallout of this oversight is not too bad. To fix this issue, one would have to separate remainder and mantissa already during step 2 and then ensure that the sticky bit is both only used in the remainder and always has a corresponding guard bit if mantissa bits were shifted out.
 
 \subsection{Operations}
 % operations.py
 Here we will explain the more interesting operations in detail. The following descriptions are notably informal and intended to be read together with the source code. First, each operation enforces that the bit widths of all parameters are equal. Aside from the operations described individually below, floatsmt also provides \verb|abs|, \verb|neg|, \verb|min_float| and \verb|max_float| operations. The implementation of these is straight-forward as specified in the standard, with the small exception that the IEEE 754 standard does not specify the result of $\min(-0, +0)$, $\max(+0, -0)$, etc. This results in a small disparity between Z3 floats and floatsmt floats: Z3 does not reduce terms of the above form, while we assume $-0 < +0$ for the purpose of $\min$ and $\max$. Z3's \verb|roundToIntegral| is notably missing from the operations implemented by floatsmt for lack of time. A working implementation of \verb|roundToIntegral| could be extracted from the implementation of integer division in \cref{rem}.
 
 \subsubsection{Addition}
-The addition is rather straight forward: Let $a$ and $b$ be the two floats which are to be added. Instead of handling everything twice for $a\geq b$ and $a<b$, the parameters of this function are assigned as follows: $f(a, b) \mapsto f'(x, y) | (x = a \vee y = a) \wedge (x = b \vee y = b) \wedge ((a \neq b) \rightarrow (x \neq y)) \wedge (x \geq y)$. Based on that, the implementation does some case handling in accordance to the standard using the case information from unpacking $a$ and $b$.
+Let $a$ and $b$ be the two floats which are to be added. Instead of handling everything twice for $a\geq b$ and $a<b$, the parameters of this function are assigned as follows: $f(a, b) \mapsto f'(x, y) | (x = a \vee y = a) \wedge (x = b \vee y = b) \wedge ((a \neq b) \rightarrow (x \neq y)) \wedge (x \geq y)$. Based on that, the implementation does some case handling in accordance to the standard using the case information from unpacking $a$ and $b$.
 
-The main calculation is performed on the two variables after denormalizing $y$ to fit the exponent of $x$. This is results in significant increases of the length of the mantissas which is the main efficiency flaw of this implementation. On the other hand, it ensures accurate and simple rounding. A possible improvement on this could be working with a sticky-bit instead. The addition itself is defined as follows: $m_r = m'_x + m'_y$ (or in case of opposite sign bits $m_r = m'_x - m'_y$), $e_r = e_x$ and $s_r = s_x$ where $m'$ are the mantissa values aligned to $e_x$. The simplified handling of $s$ and $e$ works due the 
-precondition $x \geq y$. Afterwards, the special cases of the sign-bit are applied according to the standard (if the result is zero).
+The main calculation is performed on the two variables after denormalizing $y$ to fit the exponent of $x$. This results in significant increases of the length of the mantissas, which is the main efficiency flaw of this implementation. On the other hand, it ensures accurate and simple rounding. A possible improvement on this could be working with a sticky-bit instead. The addition itself is defined as follows: $m_r = m'_x + m'_y$ (or in case of opposite sign bits $m_r = m'_x - m'_y$), $e_r = e_x$ and $s_r = s_x$, where $m'$ are the mantissa values aligned to $e_x$. The simplified handling of $s$ and $e$ works due the 
+precondition $x \geq y$. Afterwards, the special cases of the sign-bit are applied according to the standard if the result is zero.
 
-Finally, the handling of overflows (e.g. the exponent needing to be increased by 1), underflows and rounding is done by \verb|pack|.
-
+Finally, the handling of overflows (e.g. the exponent needing to be increased by 1), underflows and rounding is executed by \verb|pack|.
 
 \subsubsection{Subtraction}
-$sub(a, b)$ is defined as $add(a, neg(b))$.
-
+\verb|sub(a, b)| is defined as \verb|add(a, neg(b))|.
 
 \subsubsection{Multiplication}
 Thanks to \verb|unpack| and \verb|pack|, the implementation of \verb|mul| is fairly straight-forward. First, both arguments are unpacked and the output edge case is identified. 
@@ -272,11 +270,11 @@ Finally, we call \verb|pack| with $(s', m', e')$, finishing the operation.
 \subsubsection{Fused Multiply-Add}
 Fused Multiply-Add calculates the operation $(a * b) + c$ without rounding in between the steps.
 
-This implementation of FMA is based on the implementations of the multiplication and the addition. 
-But instead of packing the result back to the original sort after the multiplication, it is being packed to a sort with longer mantissas in order to avoid loosing information through rounding ("infinite precision"). To achieve this, the result of the core multiplication is not packed back to the original sort but instead to a sort without reduced precision to normalize it again.
+This implementation of FMA is based on the implementations of multiplication and addition. 
+But instead of packing the result back to the original sort after the multiplication, it is packed to a sort with longer mantissas in order to avoid losing information through rounding. 
 
-After converting the third float to the same sort, it gets added to the result of multiplication. That value then gets converted back down to the original sort. As this takes care of most of the special cases, only one has to be taken care of explicitly:
-If the multiplication overflows and the third parameter ($c$) is an infinite value with an opposite sign bit, instead of being NaN, the result is $c$, given that $a$ and $b$ were not infinite.
+After converting the third float to the same sort, it gets added to the result of multiplication. That value is then packed back into the original sort. As packing takes care of most of the special cases, only one has to be taken care of explicitly:
+If the multiplication overflows and the third parameter $c$ is an infinite value with an opposite sign bit, instead of being NaN, the result is $c$, assuming that $a$ and $b$ were not infinite.
 
 
 \subsubsection{Remainder}
@@ -298,36 +296,24 @@ We will now describe the process for the integer division. Let $f_1$ and $f_2$ d
 Note that despite the fact that we add $M'' > M$ to $e''$ in the worst case in step 6, the sort that we determine in \verb|rem| is still sufficient to prevent overflows in \verb|pack| during the integer division: $i$ has an extra $M'' - M$ leading zeros, which \verb|pack| removes during normalization, subtracting $M'' - M$ again and yielding at most the offset we determined earlier. 
 
 \subsubsection{Square root}
-Instead of using the wide-spread Newton-Raphson method of computing the square root, this implementation is based on the Goldschmid method which is based on scalars instead of additions. This has the advantage of circumventing the problem of small Float values not changing a bigger value in the addition and the algorithm therefore possibly not fully converging. This could result in the value being off by a bit which is avoided in the Goldschmid method. 
+Instead of using the wide-spread Newton-Raphson method of computing the square root, this implementation is based on the Goldschmid method, which is uses scalars instead of additions. This has the advantage of circumventing the problem of small float values not changing a bigger value in the addition and the algorithm therefore possibly not fully converging. This could result in the value being off by a bit which is avoided in the Goldschmid method. 
 
 Another advantage is that it can also be expressed by just using FMA-operations for the iterations:
 
-Initialization:
-\[ 
-	y_0 \approx 1/a'
-\]
-\[
-	x_0 = ay_0
-\]
-\[
-	h_0 = y_0/2
-\]
-\[
-	r_0 = FMA(neg(x_0), h_0, 1/2)
-\]
-Where $a$ is the input Float and $a'$ is an approximation for $\sqrt{a}$ : $ e_{a'} = (e_a - bias) / 2 + bias$
-\[
-x_n = FMA(neg(x_n-1), h , 1/2)
-\]
-\[
-h_n = FMA(h_n-1, r_n-1)
-\]
-\[
-r_n = FMA(neg(x_n-1, h_n-1, 1/2))	
-\]
-\\
-$x$ converges to $\sqrt{a}$. For our purposes, $\sqrt{M_a} * 2$ many iterations are enough to ensure convergence.
-Finally there is special case handling in accordance with the standard (e.g. $sqrt(a) = NaN | a < (-0)$ or $sqrt(-0) = (-0)$).
+\begin{align*}
+y_0 &\approx 1/a' \\
+x_0 &= ay_0 \\
+h_0 &= y_0/2 \\
+r_0 &= \texttt{FMA}(\texttt{neg}(x_0), h_0, 1/2)
+\end{align*}
+Here, $a$ is the input float and $a'$ is an approximation for $\sqrt{a}$: $ e_{a'} = (e_a - \text{bias}) / 2 + \text{bias}$.
+\begin{align*}
+x_n &= \texttt{FMA}(\texttt{neg}(x_{n-1}), h , 1/2)\\
+h_n &= \texttt{FMA}(h_{n-1}, r_{n-1})\\
+r_n &= \texttt{FMA}(\texttt{neg}(x_{n-1}, h_{n-1}, 1/2))
+\end{align*}
+$x$ converges to $\sqrt{a}$. For our purposes, $2\cdot\sqrt{M_a}$ many iterations are enough to ensure convergence.
+Finally there is special case handling in accordance with the standard, e.g. $\texttt{sqrt}(a) = \texttt{NaN}$ if $a < -0$ or $\texttt{sqrt}(-0) = -0$.
 
 \section{Testing methodology}
 Our testing methodology relies on verification against Z3 floats, using Z3 itself. During the development of floatsmt, we wrote the corresponding code and then implemented a validation call that uses Z3 to check whether the formula $\texttt{floatsmt\_output} = \texttt{z3\_output}$ is valid for all floats of a specific size. To compare the outputs, we convert our output to a Z3 float and then use bit-wise equality to ensure that the results are equal. The validity check for a formula $F$ is a straight-forward satisfiability check of $\text{Not}(F)$. If $F$ is not valid, Z3 produces a counter-example, which we can then use to analyze our code. Additionally, for each counter-example, we added a regression test to our test code base. Trivial operations were only tested with a list of hand-crafted test cases.
@@ -351,30 +337,36 @@ We will henceforth denote a floating point sort with mantissa width $m$ and expo
 \section{Experimental evaluation}
 Another advantage of having the Z3 implementation as a reference for comparison is performance evaluation.
 
-In order to assess the performance of the implemented operations we did measure the time it takes to generate the Z3 expressions and the time it takes to evaluate it using the Z3 function simplify. This was done for our implementation as well as the Z3 variant of the same operation. All benchmarks were performed with Mini-Floats, Half-Precision Floats, Single-Precision Floats and Double-Precision Floats.
+In order to assess the performance of the implemented operations, we measured the time it takes to generate the Z3 expressions and the time it takes to evaluate it using the Z3 function \verb|simplify|. This was done for our implementation, as well as the Z3 variant of the same operation. All benchmarks were performed with mini floats, half-precision floats, single-precision floats and double-precision floats.
 
-Table \ref{tab:performance} shows the resulting execution times in milliseconds. The Z3 results are clearly faster by multiple orders of magnitude and seem to not change with different sorts. This leads to our assumption that the main contributor for the run-time of single Z3 operations is overhead by the Python-API. Our solution does not call the Z3-API once but often hundreds of times for a single operation which increases the time needed to define the operations dramatically.
+Table \ref{tab:performance} shows the resulting execution times in milliseconds. The Z3 results are clearly faster by multiple orders of magnitude and seem to not change with different sorts. One possible reason for this is the overhead of the Python API. Our solution does not call the Z3 API once but often hundreds of times for a single operation, which likely increases the time needed to define the operations dramatically.
 
-As for the effort needed for solving the expressions, it gets clear, that the exponential blowup we introduce in the addition is the main influence for complexity in our implementation. All the operations which are based on the addition (FMA and there fore remainder and SQRT too) blow up in run-time as the sort uses more bits.
+As for the effort needed for simplifying the expressions, it is clear that the exponential blowup we introduce in the addition operation is the main cause for slowness in our implementation. All the operations which are based on addition (\verb|fma|, \verb|rem| and \verb|sqrt|) blow up in runtime as the sort uses more bits.
 
 A possible way to improve these results would be to implement the sticky-bit handling for the addition as mentioned in the respecting section.
 
-We did not come up with a simple approach to reduce the overhead introduced by the numerous Python-API calls other than not using python and possibly implementing a standard directly into the solvers logic like the developers of Z3 did.
+We did not come up with a simple approach to reduce the overhead introduced by the numerous Python API calls other than not using Python and possibly implementing a theory directly into the solvers logic.
 
 
-In order to estimate the actual impact of the overhead and its structure, we did use the Python library cProfile. Table \ref{tab:singleadditiondefinition} shows the profile of a single definition of an addition of two double-precision floating point values. The table is sorted by the accumulated time of all calls of a specific function and all the calls it makes. It can be seen that clz (count leading zeroes) is the single function in our implementation which consumes the most time on its own. It also accumulates the biggest part of the accumulated run-time. 
-Further down the list, functions which are heavily used in clz, such as the logical shift (LShR) and conditions (If) can be spotted which accumulate a significant chunk of the run-time.
-Therefore it can be considered as one of the weak points of our implementation. It is also striking that a lot of the run time is spent on overhead within the Z3 Python API caused by the significant amount of calls to it.
+In order to estimate the actual impact of the overhead and its structure, we use the Python library cProfile. Table \ref{tab:singleadditiondefinition} shows the profile of a single definition of an addition of two double-precision floating point values. The table is sorted by the accumulated time of all calls of a specific function and all the calls it makes. It can be seen that clz (count leading zeroes) is the single function in our implementation which consumes the most time on its own. It also accumulates the biggest part of the accumulated runtime. 
+Further down the list, functions which are heavily used in clz, such as the logical shift (\verb|LShR|) and conditions (\verb|If|) can be spotted which accumulate a significant chunk of the runtime.
+Therefore it can be considered as one of the weak points of our implementation. It is also striking that a lot of the runtime is spent on overhead within the Z3 Python API caused by the significant amount of calls to it.
 
-A few other remarks that get apparent are:
+A few other apparent remarks:
 \begin{itemize}
-	\item A lot of calls the Z3 function "sort" are made, instead of instantiating new sorts in most of the sub-functions, sorts could be handled in a more central way to avoid the overhead
-	\item Conditions seem to pile up a good part of the run-time and probably carry a lot of overhead.
-	\item Many functions are related to converting and handling Z3 types. Using the overloaded standard operators often hides away the complexity that lies beneath that syntactic convenience. Being more careful and explicit about those operations could have saved a lot of run-time.
+	\item Many calls to the Z3 function \verb|sort| are made. Instead of instantiating new sorts in most of the sub-functions, sorts could be handled in a more central way to avoid the overhead.
+	\item Conditions seem to pile up a good part of the runtime and probably carry a lot of overhead.
+	\item Many functions are related to converting and handling Z3 types. Using the overloaded standard operators often hides away the complexity that lies beneath that syntactic convenience. Being more careful and explicit about those operations could have saved lots of runtime.
 \end{itemize}
 
+Finally, table \ref{tab:singleadditionsimplify} shows the profile of a single call to simplify on an addition expression. As simplify is a Z3 function, it can be routed through the API directly to the solver which results in much reduced overhead. This can easily be seen when looking at the amount of functions and the number of times they were called. We think that the increased runtime is mostly a result of the exponential blowup of bit-length. For the operations which do not depend on the addition, we think that differences result mainly from missing smaller performance optimizations in our implementation.
 
-Finally, table \ref{tab:singleadditionsimplify} shows the profile of a single call to simplify on an addition expression. As simplify is an Z3 function, it can be routed through the API directly to the solver which results in far reduced overhead. This can easily be seen when looking at the amount of functions and the number of times they were called. We assume that the increased run-time is mostly a result of the exponential blowup of bit-length. For the operations which do not depend on the addition, we assume differences result mainly from missing performance optimization in our implementation.
+\section{Conclusion}
+While floatsmt did not end up being particularly efficient, it completes the task that it was created for: Ensuring that Z3's floating point theory is standard-conform and correct. With the exception of \verb|roundToIntegral|, all operations that are present in Z3's floating point theory were implemented in floatsmt and either tested extensively or validated against Z3. While a few of these validations could not be completed for performance reasons, we are confident that the performance issues and minor disparities can be repaired without too much effort. Finally, we believe that both this document and the code-base of floatsmt itself provide a useful and detailed reference to help with accurately and correctly implementing the floating point standard over bit vectors.
+
+\bibliography{doc}
+
+\appendix
 
 
 \begin{center}	
@@ -412,8 +404,8 @@ Finally, table \ref{tab:singleadditionsimplify} shows the profile of a single ca
 			& single   & 3880827    & 16417    & 9          & 7        \\
 			& double   & 2,3E+07    & 2322395  & 9          & 8       
 		\end{tabular}
-	\caption{Benchmark results floatsmt vs Z3-FP, execution-times in millisecond, each operation ran 100 times}
-	\label{tab:performance}
+		\caption{Benchmark results floatsmt vs Z3-FP, execution times in milliseconds, each operation ran 100 times}
+		\label{tab:performance}
 	\end{table}
 \end{center}
 
@@ -471,7 +463,7 @@ Finally, table \ref{tab:singleadditionsimplify} shows the profile of a single ca
 		8355    & 21      & 0       & 34      & 0       & z3.py:455(\_ctx\_from\_ast\_arg\_list)                         \\
 		...	    &...     & ... & ... &... & ...   
 	\end{tabular}
-	\caption{Profile of a single addition definition on double floats, ncalls is the number of calls, tottime the total time spend for the respecting function (without run-time of called functions), percall the tottime per call, cumtime the accumulated time of all calls of that function including the run-time of functions it calls, and percall (2) the cumtime per call, all times in milliseconds}
+	\caption{Profile of a single addition definition on double floats. ncalls is the number of calls, tottime the total time spend for the respecting function (without runtime of called functions), percall the tottime per call, cumtime the accumulated time of all calls of that function, including the runtime of functions it calls, and percall is the cumtime per call. All times are in milliseconds.}
 	\label{tab:singleadditiondefinition}
 \end{table}
 
@@ -504,17 +496,8 @@ Finally, table \ref{tab:singleadditionsimplify} shows the profile of a single ca
 		6      & 0       & 0       & 0       & 0       & z3core.py:1382(Check)                               \\
 		12     & 0       & 0       & 0       & 0       & z3types.py:19(from\_param)                         
 	\end{tabular}
-	\caption{Profile of a single addition simplification on double floats, ncalls is the number of calls, tottime the total time spend for the respecting function (without run-time of called functions), percall the tottime per call, cumtime the accumulated time of all calls of that function including the run-time of functions it calls, and percall (2) the cumtime per call, all times in milliseconds}
+	\caption{Profile of a single addition simplification on double floats. ncalls is the number of calls, tottime the total time spend for the respecting function (without runtime of called functions), percall the tottime per call, cumtime the accumulated time of all calls of that function, including the runtime of functions it calls, and percall is the cumtime per call. All times are in milliseconds.}
 	\label{tab:singleadditionsimplify}
 \end{table}
-
-
-
-\section{Conclusion}
-While floatsmt did not end up being particularly efficient, it completes the task that it was created for: Ensuring that Z3's floating point theory is standard-conform and correct. With the exception of \verb|roundToIntegral|, all operations that are present in Z3's floating point theory were implemented in floatsmt and either tested extensively or validated against Z3. While a few of these validations could not be completed for performance reasons, we are confident that the performance issues and minor disparities can be repaired without too much effort. Finally, we believe that both this document and the code-base of floatsmt itself provide a useful and detailed reference to help with accurately and correctly implementing the floating point standard over bit vectors.
-
-\bibliography{doc}
-
-\appendix
 
 \end{document}
