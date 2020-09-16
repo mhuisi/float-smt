@@ -154,7 +154,7 @@ Let us now explain the purpose of each file in the directory structure.
 
 \section{Implementation details}
 % TODO: briefly note which functions were implemented and go into detail for interesting functions. explain how interesting functions were implemented, but also why certain design decisions were made.
-This section will explain some design decisions and the implementation of all non-trivial functions in floatsmt.
+This section will explain some design decisions and the implementation of all non-trivial functions in floatsmt. Many of the following explanations are notably informal and intended to be read together with the source code.
 
 \subsection{Sorts and constructors}
 % sorts.py, constructors.py, converter.py
@@ -238,7 +238,7 @@ Then, we can unpack and pack to finish the conversion. Regrettably, there is one
 
 \subsection{Operations}
 % operations.py
-Here we will explain the more interesting operations in detail. The following descriptions are notably informal and intended to be read together with the source code. First, each operation enforces that the bit widths of all parameters are equal. Aside from the operations described individually below, floatsmt also provides \verb|abs|, \verb|neg|, \verb|min_float| and \verb|max_float| operations. The implementation of these is straight-forward as specified in the standard, with the small exception that the IEEE 754 standard does not specify the result of $\min(-0, +0)$, $\max(+0, -0)$, etc. This results in a small disparity between Z3 floats and floatsmt floats: Z3 does not reduce terms of the above form, while we assume $-0 < +0$ for the purpose of $\min$ and $\max$. Z3's \verb|roundToIntegral| is notably missing from the operations implemented by floatsmt for lack of time. A working implementation of \verb|roundToIntegral| could be extracted from the implementation of integer division in \cref{rem}.
+Here we will explain the more interesting operations in detail. First, each operation enforces that the bit widths of all parameters are equal. Aside from the operations described individually below, floatsmt also provides \verb|abs|, \verb|neg|, \verb|min_float| and \verb|max_float| operations. The implementation of these is straight-forward as specified in the standard, with the small exception that the IEEE 754 standard does not specify the result of $\min(-0, +0)$, $\max(+0, -0)$, etc. This results in a small disparity between Z3 floats and floatsmt floats: Z3 does not reduce terms of the above form, while we assume $-0 < +0$ for the purpose of $\min$ and $\max$. Z3's \verb|roundToIntegral| is notably missing from the operations implemented by floatsmt for lack of time. A working implementation of \verb|roundToIntegral| could be extracted from the implementation of integer division in \cref{rem}.
 
 \subsubsection{Addition}
 Let $a$ and $b$ be the two floats which are to be added. Instead of handling everything twice for $a\geq b$ and $a<b$, $a$ and $b$ are mapped to $x$ and $y$ such that $x$ is the absolutely bigger value. Based on that, the implementation does some case handling in accordance to the standard using the case information from unpacking $x$ and $y$.
